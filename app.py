@@ -458,7 +458,7 @@ def broadcast_state():
         'league_table': scoreboards
     }
     socketio.emit('state_update', state, room='game_room')
-    
+
     for name in game.players:
         target_sid = game.name_to_sid.get(name)
         if target_sid:
