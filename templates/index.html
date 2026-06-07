@@ -2,56 +2,242 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=no">
     <title>Family Blackjack Multiplayer</title>
     <script src="/templates/socket.io.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1a4a25; color: white; text-align: center; margin: 0; padding: 10px; }
-        #table { display: flex; justify-content: space-around; margin: 15px; background: #143d1f; padding: 20px; border-radius: 15px; flex-wrap: wrap; }
-        .table-panel { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; min-width: 280px; margin: 5px; box-sizing: border-box;}
+        /* Base Setup & Mobile-First Reset */
+        body { 
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: #1a4a25; 
+            color: white; 
+            text-align: center; 
+            margin: 0; 
+            padding: 8px; 
+            box-sizing: border-box;
+            transition: transform 0.1s ease;
+        }
         
-        .card { display: inline-block; position: relative; padding: 15px 10px; margin: 5px; background: white; color: black; border-radius: 8px; font-weight: bold; cursor: pointer; border: 3px solid transparent; min-width: 60px; user-select: none;}
-        .card.selected { border-color: #ffeb3b; background: #fffde7; transform: translateY(-5px); }
-        .red { color: red; }
+        /* The Magic Haptic Wobble Screen Shake Layer Effect */
+        .wobble-effect {
+            animation: screenShake 0.4s ease-in-out;
+            background: #3a1515 !important;
+        }
+
+        @keyframes screenShake {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            15% { transform: translate(-6px, 4px) rotate(-1.5deg); }
+            30% { transform: translate(5px, -3px) rotate(1.5deg); }
+            45% { transform: translate(-4px, -2px) rotate(-1deg); }
+            60% { transform: translate(4px, 3px) rotate(1deg); }
+            75% { transform: translate(-2px, 1px) rotate(-0.5deg); }
+            90% { transform: translate(2px, -1px) rotate(0.5deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
         
-        .badge { display: none; position: absolute; top: -8px; right: -8px; background: #ffeb3b; color: black; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; line-height: 20px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+        h1 { font-size: 1.8rem; margin: 10px 0; }
+
+        #table { 
+            display: flex; 
+            flex-direction: column;
+            gap: 12px;
+            margin: 10px 0; 
+            background: #143d1f; 
+            padding: 12px; 
+            border-radius: 12px; 
+        }
+        
+        .table-panel { 
+            background: rgba(0,0,0,0.2); 
+            padding: 12px; 
+            border-radius: 8px; 
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        /* Player & Nudge Layout elements */
+        .player-row {
+            display: flex;
+            flex-direction: column;
+            background: rgba(0, 0, 0, 0.15);
+            margin: 6px 0;
+            padding: 8px;
+            border-radius: 6px;
+            border-left: 4px solid transparent;
+        }
+        .player-row.active-turn { border-left-color: #ffeb3b; }
+        .player-meta { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+        .nudge-tray { display: flex; gap: 6px; margin-top: 6px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px; justify-content: flex-start; }
+        .nudge-btn { background: transparent !important; box-shadow: none !important; padding: 2px 6px !important; margin: 0 !important; font-size: 16px !important; opacity: 0.8; transition: transform 0.1s ease; }
+        .nudge-btn:hover { transform: scale(1.3); opacity: 1; }
+
+        /* 🃏 AUTHENTIC REALISTIC PLAYING CARD CSS ENGINE 🃏 */
+        .card { 
+            display: inline-block; 
+            position: relative; 
+            width: 75px;
+            height: 110px;
+            background: white; 
+            color: black; 
+            border-radius: 8px; 
+            margin: 6px;
+            box-sizing: border-box;
+            box-shadow: 0 3px 7px rgba(0,0,0,0.4);
+            cursor: pointer; 
+            border: 3px solid transparent; 
+            user-select: none;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+            
+            /* CSS Grid to lock corner pips and middle symbols perfectly */
+            display: inline-grid;
+            grid-template-columns: 22px 1fr 22px;
+            grid-template-rows: 24px 1fr 24px;
+        }
+        
+        /* Micro Corner Indices (Top-Left and Bottom-Right) */
+        .card .pip-tl {
+            grid-column: 1;
+            grid-row: 1;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1.1;
+            padding-top: 3px;
+            padding-left: 2px;
+        }
+        .card .pip-br {
+            grid-column: 3;
+            grid-row: 3;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1.1;
+            transform: rotate(180deg); /* Invert bottom pip */
+            padding-top: 3px;
+            padding-left: 2px;
+        }
+
+        /* Large Centered Motif Suit Icon */
+        .card .suit-center {
+            grid-column: 2;
+            grid-row: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+        }
+
+        /* Card States & Color Palettes */
+        .card.selected { 
+            border-color: #ffeb3b; 
+            background: #fffde7; 
+            transform: translateY(-12px); 
+        }
+        .red { color: #d9534f; }
+        
+        /* Selection Counter Dot Bubble */
+        .badge { 
+            display: none; 
+            position: absolute; 
+            top: -10px; 
+            right: -10px; 
+            background: #ffeb3b; 
+            color: black; 
+            border-radius: 50%; 
+            width: 22px; 
+            height: 22px; 
+            font-size: 13px; 
+            line-height: 22px; 
+            text-align: center; 
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4); 
+            z-index: 10;
+        }
         .card.selected .badge { display: block; }
 
-        button { background: #e0a800; border: none; padding: 10px 20px; font-size: 16px; font-weight: bold; border-radius: 5px; cursor: pointer; margin: 5px; color: black; }
-        button:hover:not(:disabled) { background: #ffc107; }
-        button:disabled { background: #4a544c !important; color: #888 !important; cursor: not-allowed; opacity: 0.6; }
+        /* Centered Discard Pile Frame Scaling */
+        .discard-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px 0;
+        }
+        .discard-wrapper .card {
+            width: 95px;
+            height: 140px;
+            grid-template-columns: 26px 1fr 26px;
+            grid-template-rows: 28px 1fr 28px;
+            cursor: default;
+        }
+        .discard-wrapper .card .pip-tl, .discard-wrapper .card .pip-br { font-size: 16px; }
+        .discard-wrapper .card .suit-center { font-size: 38px; }
 
-        #hand-container { margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 10px; }
-        .lobby-actions { margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; }
-        
+        button { 
+            background: #e0a800; 
+            border: none; 
+            padding: 12px 18px; 
+            font-size: 15px; 
+            font-weight: bold; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            margin: 4px; 
+            color: black;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            -webkit-tap-highlight-color: transparent;
+        }
+        button:hover:not(:disabled) { background: #ffc107; }
+        button:disabled { background: #4a544c !important; color: #888 !important; cursor: not-allowed; opacity: 0.6; box-shadow: none; }
+
+        #setup-panel input { padding: 10px; font-size: 16px; border-radius: 6px; border: none; width: 70%; max-width: 250px; margin-bottom: 8px; }
+
+        #hand-container { margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); }
+        #my-hand { display: flex; overflow-x: auto; overflow-y: hidden; padding: 15px 5px; gap: 2px; justify-content: flex-start; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        #my-hand::-webkit-scrollbar { height: 6px; }
+        #my-hand::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 10px;}
+        #my-hand::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+
+        .lobby-actions { margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; }
         .last-card-warning { color: #ff3b30; font-weight: bold; animation: blinker 1s linear infinite; }
         @keyframes blinker { 50% { opacity: 0; } }
 
-        #personal-penalty-alert { display: none; background: #7c1515; border: 3px dashed #ff3b30; border-radius: 10px; padding: 15px; margin: 15px auto; max-width: 600px; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 0.9; } 50% { opacity: 1; } 100% { opacity: 0.9; } }
-        
-        #game-log-box { background: rgba(0,0,0,0.4); text-align: left; max-width: 800px; margin: 15px auto; padding: 15px; border-radius: 8px; height: 110px; overflow-y: auto; font-family: monospace; font-size: 13px; }
+        #personal-penalty-alert { display: none; background: #7c1515; border: 2px dashed #ff3b30; border-radius: 10px; padding: 12px; margin: 10px auto; max-width: 600px; }
+        #game-log-box { background: rgba(0,0,0,0.4); text-align: left; max-width: 100%; margin: 10px auto; padding: 12px; border-radius: 8px; height: 90px; overflow-y: auto; font-family: monospace; font-size: 12px; }
 
-        #ace-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { background: #143d1f; border: 3px solid #ffeb3b; padding: 30px; border-radius: 15px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .generic-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; }
+        .modal-content { background: #143d1f; border: 3px solid #ffeb3b; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.5); max-width: 400px; width: 100%; }
         
-        .league-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+        #toast-notification { visibility: hidden; min-width: 250px; background-color: #7c1515; color: #fff; text-align: center; border: 2px solid #ff3b30; border-radius: 8px; padding: 12px; position: fixed; z-index: 2000; left: 50%; top: -50px; transform: translateX(-50%); font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.3s, top 0.3s; width: 80%; max-width: 340px; }
+        #toast-notification.show { visibility: visible; opacity: 1; top: 15px; }
+
+        .league-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
         .league-table th, .league-table td { border: 1px solid rgba(255,255,255,0.2); padding: 6px; text-align: center; }
         .league-table th { background: rgba(0,0,0,0.4); color: #ffeb3b; }
+
+        @media (min-width: 768px) {
+            body { padding: 20px; }
+            h1 { font-size: 2.3rem; }
+            #table { flex-direction: row; justify-content: space-around; padding: 20px; }
+            .table-panel { width: 33%; min-width: 260px; }
+            #my-hand { justify-content: center; overflow-x: visible; flex-wrap: wrap; }
+            button { padding: 10px 20px; font-size: 16px; }
+            #game-log-box { height: 125px; }
+        }
     </style>
 </head>
 <body>
 
-    <h1>♠️ Family Blackjack Dashboard ♥️</h1>
+    <div id="toast-notification">⚠️ Warning Placeholder</div>
+
+    <h1>♠️ Family Blackjack 🃏</h1>
     
     <div id="setup-panel">
-        <input type="text" id="username" placeholder="Enter Your Name" style="padding: 10px; font-size: 16px;">
+        <input type="text" id="username" placeholder="Enter Your Name">
         <button onclick="joinGame()">Join Table</button>
     </div>
 
-    <div id="ace-modal">
+    <div id="ace-modal" class="generic-modal">
         <div class="modal-content">
-            <h2 style="color: #ffeb3b; margin-top: 0;">🔮 Ace Played! Choose Game Suit:</h2>
-            <p>Select which suit the next player must follow:</p>
+            <h2 style="color: #ffeb3b; margin-top: 0; font-size: 1.4rem;">🔮 Ace Played! Choose Suit:</h2>
             <button onclick="selectAceSuit('Hearts')" style="background:#d9534f; color:white;">♥ Hearts</button>
             <button onclick="selectAceSuit('Diamonds')" style="background:#f0ad4e; color:white;">♦ Diamonds</button>
             <button onclick="selectAceSuit('Clubs')" style="background:#292b2c; color:white;">♣ Clubs</button>
@@ -59,65 +245,76 @@
         </div>
     </div>
 
+    <div id="game-over-modal" class="generic-modal">
+        <div class="modal-content" style="border-color: #e0a800;">
+            <h1 style="color: #ffeb3b; margin-top: 0; font-size: 24px;">🏆 MATCH OVER! 🏆</h1>
+            <p id="game-over-text" style="font-size: 16px; margin: 15px 0; font-weight: bold;"></p>
+            <button onclick="closeGameOverModal()" style="width:100%;">Back to Dashboard</button>
+        </div>
+    </div>
+
     <div id="personal-penalty-alert">
-        <h2 style="margin: 0 0 10px 0;">🚨 INCOMING PENALTY ATTACK! 🚨</h2>
-        <p id="penalty-alert-text" style="font-size: 18px; margin: 0;"></p>
+        <h3 style="margin: 0 0 5px 0;">🚨 INCOMING PENALTY ATTACK! 🚨</h3>
+        <p id="penalty-alert-text" style="font-size: 15px; margin: 0;"></p>
     </div>
 
     <div id="table">
         <div class="table-panel">
             <h3>Match Status</h3>
-            <p id="turn-indicator" style="font-size: 16px; color: #ffeb3b;">Waiting for players...</p>
-            <p id="penalty-tracker">No active penalties.</p>
+            <p id="turn-indicator" style="color: #ffeb3b; font-weight: bold;">Waiting for players...</p>
+            <p id="penalty-tracker" style="font-size: 14px;">No active penalties.</p>
             
-            <h4>Players at Table:</h4>
-            <ul id="player-list" style="list-style: none; padding: 0; font-weight: bold; text-align: left;"></ul>
+            <h4 style="margin: 10px 0 5px 0;">Players & Nudges:</h4>
+            <div id="player-list-box"></div>
             
             <div class="lobby-actions" id="lobby-controls">
-                <button onclick="startGame()">🚀 Start Match</button>
+                <button onclick="startGame()" style="width: 100%;">🚀 Start Match</button>
             </div>
         </div>
 
-        <div class="table-panel" style="min-width: 200px;">
+        <div class="table-panel">
             <h3>Discard Pile</h3>
-            <div id="top-card" class="card" style="font-size: 24px; padding: 25px 20px; line-height: 1.2;">-</div>
-            <p id="active-suit-indicator" style="font-weight: bold; margin-top: 5px; color: #ffeb3b;"></p>
+            <div class="discard-wrapper">
+                <div id="top-card" class="card">
+                    <div class="pip-tl">-</div>
+                    <div class="suit-center">🃏</div>
+                    <div class="pip-br">-</div>
+                </div>
+            </div>
+            <p id="active-suit-indicator" style="font-weight: bold; margin-top: 5px; color: #ffeb3b; font-size: 14px;"></p>
         </div>
 
-        <div class="table-panel" style="min-width: 320px;">
-            <h3>🏆 Family League Table</h3>
+        <div class="table-panel">
+            <h3>🏆 League Table</h3>
             <table class="league-table">
                 <thead>
-                    <tr>
-                        <th>Player</th>
-                        <th>Wins</th>
-                        <th>Losses</th>
-                    </tr>
+                    <tr><th>Player</th><th>W</th><th>L</th></tr>
                 </thead>
                 <tbody id="league-rows">
-                    <tr><td colspan="3" style="color: #aaa;">No matches tracked yet.</td></tr>
+                    <tr><td colspan="3" style="color: #aaa;">No matches tracked.</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
     <div id="hand-container">
-        <h3>Your Hand</h3>
+        <h3 style="margin: 5px 0;">Your Hand</h3>
         <div id="my-hand"></div>
-        <br>
-        <button onclick="playSelected()" id="play-btn" disabled>Play Cards</button>
-        <button onclick="drawOrResolve()" id="action-draw-btn">Draw Card</button>
+        <div style="margin-top: 5px;">
+            <button onclick="playSelected()" id="play-btn" disabled>Play Cards</button>
+            <button onclick="drawOrResolve()" id="action-draw-btn">Draw Card</button>
+        </div>
         
-        <div id="queen-actions" style="display:none; margin-top: 15px;">
-            <p style="color: #ffeb3b; font-weight: bold;">👑 You played a Queen! Select a suit to completely cascade dump:</p>
-            <button onclick="cascade('Hearts')">♥ Hearts</button>
-            <button onclick="cascade('Diamonds')">♦ Diamonds</button>
-            <button onclick="cascade('Clubs')">♣ Clubs</button>
-            <button onclick="cascade('Spades')">♠ Spades</button>
+        <div id="queen-actions" style="display:none; margin-top: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
+            <p style="color: #ffeb3b; font-weight: bold; margin: 0 0 5px 0; font-size: 14px;">👑 Queen Cascade Dump Suit:</p>
+            <button onclick="cascade('Hearts')" style="padding: 6px 12px; font-size: 13px;">♥</button>
+            <button onclick="cascade('Diamonds')" style="padding: 6px 12px; font-size: 13px;">♦</button>
+            <button onclick="cascade('Clubs')" style="padding: 6px 12px; font-size: 13px;">♣</button>
+            <button onclick="cascade('Spades')" style="padding: 6px 12px; font-size: 13px;">♠</button>
         </div>
     </div>
 
-    <h4>Live Match Timeline:</h4>
+    <h4 style="text-align: left; margin: 15px 0 5px 0; font-size: 14px;">Live Match Timeline:</h4>
     <div id="game-log-box"></div>
 
     <script>
@@ -126,39 +323,108 @@
         let currentHand = [];
         let globalState = null;
         let myTurn = false;
+        let toastTimeout = null;
+
+        function triggerMobileToast(message) {
+            const toast = document.getElementById('toast-notification');
+            toast.innerText = message;
+            toast.className = "show";
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => { toast.className = ""; }, 4000);
+        }
+
+        // Translation dictionary helper mapping string records to traditional shorthand
+        function getShortValue(fullValString) {
+            const mapping = { 'Ace': 'A', 'Jack': 'J', 'Queen': 'Q', 'King': 'K' };
+            return mapping[fullValString] || fullValString;
+        }
+
+        function getSuitSymbol(suit) { 
+            return suit === 'Hearts' ? '♥' : suit === 'Diamonds' ? '♦' : suit === 'Clubs' ? '♣' : '♠'; 
+        }
+
+        // Factory function to render standard double corner indexed grid layouts
+        function buildCardElement(cardData) {
+            const cardDiv = document.createElement('div');
+            const shortVal = getShortValue(cardData.value);
+            const suitSym = getSuitSymbol(cardData.suit);
+            
+            cardDiv.className = `card ${['Hearts','Diamonds'].includes(cardData.suit) ? 'red' : ''}`;
+            
+            // Generate layout corner/center elements
+            cardDiv.innerHTML = `
+                <div class="pip-tl">${shortVal}<br>${suitSym}</div>
+                <div class="suit-center">${suitSym}</div>
+                <div class="pip-br">${shortVal}<br>${suitSym}</div>
+                <span class="badge"></span>
+            `;
+            return cardDiv;
+        }
+
+        socket.on('receive_nudge', (data) => {
+            soundEffect('nudge_vibe');
+            document.body.classList.add('wobble-effect');
+            triggerMobileToast(`💥 Nudge from ${data.sender}: ${data.emoji}`);
+            setTimeout(() => { document.body.classList.remove('wobble-effect'); }, 450); 
+        });
+
+        function fireNudge(targetPlayer, emojiChar) {
+            socket.emit('send_nudge', { target: targetPlayer, emoji: emojiChar });
+        }
 
         function soundEffect(type) {
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 if (!AudioContext) return;
                 const ctx = new AudioContext();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.connect(gain);
-                gain.connect(ctx.destination);
                 const now = ctx.currentTime;
 
-                if (type === 'play') {
+                if (type === 'shuffle') {
+                    for (let i = 0; i < 8; i++) {
+                        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+                        osc.type = 'triangle'; osc.frequency.setValueAtTime(150 + (i * 40), now + (i * 0.04));
+                        gain.connect(ctx.destination); osc.connect(gain);
+                        gain.gain.setValueAtTime(0.08, now + (i * 0.04));
+                        gain.gain.linearRampToValueAtTime(0, now + (i * 0.04) + 0.03);
+                        osc.start(now + (i * 0.04)); osc.stop(now + (i * 0.04) + 0.03);
+                    }
+                } else if (type === 'play') {
+                    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
                     osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now);
                     osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
                     gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.15);
                     osc.start(now); osc.stop(now + 0.15);
                 } else if (type === 'draw') {
+                    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
                     osc.type = 'sine'; osc.frequency.setValueAtTime(600, now);
                     osc.frequency.linearRampToValueAtTime(300, now + 0.12);
                     gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0, now + 0.12);
                     osc.start(now); osc.stop(now + 0.12);
                 } else if (type === 'penalty') {
+                    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
                     osc.type = 'sawtooth'; osc.frequency.setValueAtTime(180, now);
                     osc.frequency.linearRampToValueAtTime(90, now + 0.3);
                     gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.3);
                     osc.start(now); osc.stop(now + 0.3);
-                } else if (type === 'start') {
-                    osc.type = 'square'; osc.frequency.setValueAtTime(523.25, now);
-                    osc.frequency.setValueAtTime(659.25, now + 0.1); osc.frequency.setValueAtTime(783.99, now + 0.2);
-                    gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.35);
-                    osc.start(now); osc.stop(now + 0.35);
+                } else if (type === 'nudge_vibe') {
+                    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
+                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(110, now);
+                    gain.gain.setValueAtTime(0.3, now); gain.gain.linearRampToValueAtTime(0, now + 0.1);
+                    osc.start(now); osc.stop(now + 0.12);
+                    setTimeout(() => {
+                        const osc2 = ctx.createOscillator(); const gain2 = ctx.createGain();
+                        osc2.connect(gain2); gain2.connect(ctx.destination);
+                        osc2.type = 'sawtooth'; osc2.frequency.setValueAtTime(105, ctx.currentTime);
+                        gain2.gain.setValueAtTime(0.3, ctx.currentTime); gain2.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.1);
+                        osc2.start(); osc2.stop(ctx.currentTime + 0.12);
+                    }, 140);
                 } else if (type === 'victory') {
+                    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
                     osc.type = 'square'; osc.frequency.setValueAtTime(587.33, now);
                     osc.frequency.setValueAtTime(880, now + 0.15); osc.frequency.setValueAtTime(1174.66, now + 0.3);
                     gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0, now + 0.6);
@@ -171,18 +437,20 @@
 
         socket.on('state_update', (state) => {
             globalState = state;
+            const clientName = document.getElementById('username').value.trim();
+            
             if (state.is_started) {
                 document.getElementById('lobby-controls').style.display = 'none';
-                document.getElementById('turn-indicator').innerText = `Current Turn: ${state.current_player}`;
-                myTurn = (socket.id === state.current_player_sid);
+                document.getElementById('turn-indicator').innerText = `Turn: ${state.current_player}`;
+                myTurn = (state.current_player && clientName === state.current_player);
             } else {
                 document.getElementById('lobby-controls').style.display = 'block';
-                document.getElementById('turn-indicator').innerText = `Lobby Stage (Game not started)`;
+                document.getElementById('turn-indicator').innerText = `Lobby (Not started)`;
                 myTurn = false;
             }
             
             if (state.penalty > 0) {
-                document.getElementById('penalty-tracker').innerText = `⚠️ Active Chain: Stacked +${state.penalty} (${state.penalty_type}s)`;
+                document.getElementById('penalty-tracker').innerText = `⚠️ Stacked Penalty: +${state.penalty} (${state.penalty_type}s)`;
             } else {
                 document.getElementById('penalty-tracker').innerText = "No active penalties.";
             }
@@ -192,13 +460,12 @@
             
             if (state.penalty > 0 && myTurn) {
                 alertBox.style.display = 'block';
-                drawBtn.innerText = `Accept Penalty (+${state.penalty} Cards)`;
+                drawBtn.innerText = `Take Penalty (+${state.penalty})`;
                 drawBtn.style.background = '#d9534f';
-                
                 if (state.penalty_type === '2') {
-                    document.getElementById('penalty-alert-text').innerHTML = `You are facing a <b>+${state.penalty} card penalty</b>! Play a <b>2</b> to stack it, or accept the cards.`;
+                    document.getElementById('penalty-alert-text').innerHTML = `Facing <b>+${state.penalty}</b>! Counter with a <b>2</b> or accept.`;
                 } else if (state.penalty_type === 'BJ') {
-                    document.getElementById('penalty-alert-text').innerHTML = `You are facing a <b>+${state.penalty} card penalty</b> from Black Jacks! Play a <b>Jack</b> to defend/counter, or accept the cards.`;
+                    document.getElementById('penalty-alert-text').innerHTML = `Facing <b>+${state.penalty}</b> from Jacks! Counter with a <b>Jack</b> or accept.`;
                 }
             } else {
                 alertBox.style.display = 'none';
@@ -206,46 +473,60 @@
                 drawBtn.style.background = '#e0a800';
             }
 
+            // Update Top Discard Pile Element using nested corners
             const topCardDiv = document.getElementById('top-card');
             const suitIndicator = document.getElementById('active-suit-indicator');
             if (state.top_card) {
-                topCardDiv.innerText = `${state.top_card.value}\n${getSuitSymbol(state.top_card.suit)}`;
+                const shortVal = getShortValue(state.top_card.value);
+                const suitSym = getSuitSymbol(state.top_card.suit);
+                
                 topCardDiv.className = `card ${['Hearts','Diamonds'].includes(state.top_card.suit) ? 'red' : ''}`;
-                
-                if (state.active_suit) {
-                    suitIndicator.innerText = `Active Suit: ${state.active_suit} ${getSuitSymbol(state.active_suit)}`;
-                } else {
-                    suitIndicator.innerText = "";
-                }
-                
+                topCardDiv.innerHTML = `
+                    <div class="pip-tl">${shortVal}<br>${suitSym}</div>
+                    <div class="suit-center">${suitSym}</div>
+                    <div class="pip-br">${shortVal}<br>${suitSym}</div>
+                `;
+                suitIndicator.innerText = state.active_suit ? `Suit: ${state.active_suit} ${getSuitSymbol(state.active_suit)}` : "";
                 document.getElementById('queen-actions').style.display = (state.top_card.value === 'Queen' && myTurn) ? 'block' : 'none';
-            } else {
-                suitIndicator.innerText = "";
             }
 
-            // Render Table Roster & Last Card tracking tags
-            const list = document.getElementById('player-list');
-            list.innerHTML = '';
+            const listBox = document.getElementById('player-list-box');
+            listBox.innerHTML = '';
+            
             state.player_list.forEach(p => {
-                const li = document.createElement('li');
-                const isCurrent = (p === state.current_player) ? "⚡ (Active Turn)" : "";
+                const rowDiv = document.createElement('div');
+                rowDiv.className = `player-row ${p === state.current_player ? 'active-turn' : ''}`;
                 
-                let statusText = "Ready in Lobby";
+                let statusText = "Ready";
                 let lastCardBadge = "";
                 if (state.is_started && state.hand_sizes && state.hand_sizes[p] !== undefined) {
                     const count = state.hand_sizes[p];
                     statusText = `${count} cards`;
-                    if (count === 1) {
-                        lastCardBadge = ` <span class="last-card-warning">⚠️ [LAST CARD!]</span>`;
-                    }
+                    if (count === 1) lastCardBadge = ` <span class="last-card-warning">⚠️</span>`;
                 }
-                
-                li.innerHTML = `👤 ${p}: ${statusText} ${isCurrent}${lastCardBadge}`;
-                if (p === state.current_player) li.style.color = '#ffeb3b';
-                list.appendChild(li);
+
+                const metaDiv = document.createElement('div');
+                metaDiv.className = 'player-meta';
+                metaDiv.innerHTML = `<span>👤 <b>${p}</b>: ${statusText} ${lastCardBadge}</span> <span>${p === state.current_player ? '⚡ Turn' : ''}</span>`;
+                if (p === state.current_player) metaDiv.style.color = '#ffeb3b';
+                rowDiv.appendChild(metaDiv);
+
+                if (p !== clientName) {
+                    const tray = document.createElement('div');
+                    tray.className = 'nudge-tray';
+                    const emojis = ['⏰', '🤔', '👀', '😂', '🃏'];
+                    emojis.forEach(emo => {
+                        const btn = document.createElement('button');
+                        btn.className = 'nudge-btn';
+                        btn.innerText = emo;
+                        btn.onclick = () => fireNudge(p, emo);
+                        tray.appendChild(btn);
+                    });
+                    rowDiv.appendChild(tray);
+                }
+                listBox.appendChild(rowDiv);
             });
 
-            // Render Career History League Score Rows
             const leagueBody = document.getElementById('league-rows');
             if (state.league_table && state.league_table.length > 0) {
                 leagueBody.innerHTML = '';
@@ -255,7 +536,6 @@
                     leagueBody.appendChild(tr);
                 });
             }
-
             evaluateButtonAbilities();
         });
 
@@ -266,13 +546,7 @@
             selectedCards = []; 
             
             data.hand.forEach((card) => {
-                const cDiv = document.createElement('div');
-                cDiv.className = `card ${['Hearts','Diamonds'].includes(card.suit) ? 'red' : ''}`;
-                cDiv.innerText = `${card.value}\n${getSuitSymbol(card.suit)}`;
-                
-                const badge = document.createElement('span');
-                badge.className = 'badge';
-                cDiv.appendChild(badge);
+                const cDiv = buildCardElement(card);
                 
                 cDiv.onclick = () => {
                     cDiv.classList.toggle('selected');
@@ -291,32 +565,27 @@
 
         function evaluateButtonAbilities() {
             const playBtn = document.getElementById('play-btn');
-            if (!globalState || !globalState.is_started || !myTurn || selectedCards.length === 0) {
-                playBtn.disabled = true;
-                return;
-            }
-            playBtn.disabled = false;
+            playBtn.disabled = (!globalState || !globalState.is_started || !myTurn || selectedCards.length === 0);
         }
 
         function updateBadges(handDiv) {
             const cardsInDOM = handDiv.getElementsByClassName('card');
             for (let div of cardsInDOM) {
                 const b = div.getElementsByClassName('badge')[0];
-                const textLines = div.innerText.split('\n');
-                const val = textLines[0];
-                const suitSym = textLines[1];
+                const pipText = div.getElementsByClassName('pip-tl')[0].innerText;
+                const val = pipText.split('\n')[0];
+                const suitSym = pipText.split('\n')[1];
                 
-                const idx = selectedCards.findIndex(c => c.value === val && getSuitSymbol(c.suit) === suitSym);
+                const idx = selectedCards.findIndex(c => getShortValue(c.value) === val && getSuitSymbol(c.suit) === suitSym);
                 if (idx !== -1) {
                     b.innerText = idx + 1;
+                } else {
+                    b.innerText = "";
                 }
             }
         }
 
-        socket.on('prompt_ace_suit', () => {
-            document.getElementById('ace-modal').style.display = 'flex';
-        });
-
+        socket.on('prompt_ace_suit', () => { document.getElementById('ace-modal').style.display = 'flex'; });
         socket.on('game_log', (data) => {
             const logBox = document.getElementById('game-log-box');
             logBox.innerHTML += `<div>${data.msg}</div>`;
@@ -325,30 +594,24 @@
 
         function joinGame() {
             const name = document.getElementById('username').value.trim();
-            if (!name) { alert("Please enter a name!"); return; }
+            if (!name) { triggerMobileToast("Please enter a name!"); return; }
             socket.emit('join_game', { name: name });
             document.getElementById('setup-panel').style.display = 'none';
             soundEffect('play');
         }
 
         function startGame() { socket.emit('start_match'); }
-
-        function playSelected() {
-            if (selectedCards.length === 0) return;
-            socket.emit('play_cards', { cards: selectedCards });
-        }
-
-        function selectAceSuit(suit) {
-            socket.emit('declare_ace_suit', { suit: suit });
-            document.getElementById('ace-modal').style.display = 'none';
-        }
-
+        function playSelected() { if (selectedCards.length === 0) return; socket.emit('play_cards', { cards: selectedCards }); }
+        function selectAceSuit(suit) { socket.emit('declare_ace_suit', { suit: suit }); document.getElementById('ace-modal').style.display = 'none'; }
         function drawOrResolve() { socket.emit('take_penalty_or_draw'); }
         function cascade(suit) { socket.emit('queen_cascade', { suit: suit }); }
-        function getSuitSymbol(suit) { return suit === 'Hearts' ? '♥' : suit === 'Diamonds' ? '♦' : suit === 'Clubs' ? '♣' : '♠'; }
 
-        socket.on('error', (data) => { alert(data.msg); });
-        socket.on('game_over', (data) => { alert(`🎉 MATCH OVER! ${data.winner} won the round!`); });
+        socket.on('error', (data) => { triggerMobileToast(data.msg); });
+        socket.on('game_over', (data) => { 
+            document.getElementById('game-over-text').innerText = `${data.winner} cleared their hand and won!`;
+            document.getElementById('game-over-modal').style.display = 'flex';
+        });
+        function closeGameOverModal() { document.getElementById('game-over-modal').style.display = 'none'; }
     </script>
 </body>
 </html>
