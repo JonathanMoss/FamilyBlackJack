@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Family Blackjack Multiplayer</title>
+    <script src="/templates/socket.io.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1a4a25; color: white; text-align: center; margin: 0; padding: 10px; }
+        #table { display: flex; justify-content: space-around; margin: 15px; background: #143d1f; padding: 20px; border-radius: 15px; flex-wrap: wrap; }
+        .table-panel { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; min-width: 280px; margin: 5px; box-sizing: border-box;}
+        
+        .card { display: inline-block; position: relative; padding: 15px 10px; margin: 5px; background: white; color: black; border-radius: 8px; font-weight: bold; cursor: pointer; border: 3px solid transparent; min-width: 60px; user-select: none;}
+        .card.selected { border-color: #ffeb3b; background: #fffde7; transform: translateY(-5px); }
+        .red { color: red; }
+        
+        .badge { display: none; position: absolute; top: -8px; right: -8px; background: #ffeb3b; color: black; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; line-height: 20px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+        .card.selected .badge { display: block; }
+
+        button { background: #e0a800; border: none; padding: 10px 20px; font-size: 16px; font-weight: bold; border-radius: 5px; cursor: pointer; margin: 5px; color: black; }
+        button:hover:not(:disabled) { background: #ffc107; }
+        button:disabled { background: #4a544c !important; color: #888 !important; cursor: not-allowed; opacity: 0.6; }
+
+        #hand-container { margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 10px; }
+        .lobby-actions { margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; }
+        
+        .last-card-warning { color: #ff3b30; font-weight: bold; animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+
+        #personal-penalty-alert { display: none; background: #7c1515; border: 3px dashed #ff3b30; border-radius: 10px; padding: 15px; margin: 15px auto; max-width: 600px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 0.9; } 50% { opacity: 1; } 100% { opacity: 0.9; } }
+        
+        #game-log-box { background: rgba(0,0,0,0.4); text-align: left; max-width: 800px; margin: 15px auto; padding: 15px; border-radius: 8px; height: 110px; overflow-y: auto; font-family: monospace; font-size: 13px; }
+
+        #ace-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: #143d1f; border: 3px solid #ffeb3b; padding: 30px; border-radius: 15px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        
+        .league-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+        .league-table th, .league-table td { border: 1px solid rgba(255,255,255,0.2); padding: 6px; text-align: center; }
+        .league-table th { background: rgba(0,0,0,0.4); color: #ffeb3b; }
+    </style>
+</head>
+<body>
+
+    <h1>♠️ Family Blackjack Dashboard ♥️</h1>
+    
+    <div id="setup-panel">
+        <input type="text" id="username" placeholder="Enter Your Name" style="padding: 10px; font-size: 16px;">
+        <button onclick="joinGame()">Join Table</button>
+    </div>
+
+    <div id="ace-modal">
+        <div class="modal-content">
+            <h2 style="color: #ffeb3b; margin-top: 0;">🔮 Ace Played! Choose Game Suit:</h2>
+            <p>Select which suit the next player must follow:</p>
+            <button onclick="selectAceSuit('Hearts')" style="background:#d9534f; color:white;">♥ Hearts</button>
+            <button onclick="selectAceSuit('Diamonds')" style="background:#f0ad4e; color:white;">♦ Diamonds</button>
+            <button onclick="selectAceSuit('Clubs')" style="background:#292b2c; color:white;">♣ Clubs</button>
+            <button onclick="selectAceSuit('Spades')" style="background:#0275d8; color:white;">♠ Spades</button>
+        </div>
+    </div>
+
+    <div id="personal-penalty-alert">
+        <h2 style="margin: 0 0 10px 0;">🚨 INCOMING PENALTY ATTACK! 🚨</h2>
+        <p id="penalty-alert-text" style="font-size: 18px; margin: 0;"></p>
+    </div>
+
+    <div id="table">
+        <div class="table-panel">
+            <h3>Match Status</h3>
+            <p id="turn-indicator" style="font-size: 16px; color: #ffeb3b;">Waiting for players...</p>
+            <p id="penalty-tracker">No active penalties.</p>
+            
+            <h4>Players at Table:</h4>
+            <ul id="player-list" style="list-style: none; padding: 0; font-weight: bold; text-align: left;"></ul>
+            
+            <div class="lobby-actions" id="lobby-controls">
+                <button onclick="startGame()">🚀 Start Match</button>
+            </div>
+        </div>
+
+        <div class="table-panel" style="min-width: 200px;">
+            <h3>Discard Pile</h3>
+            <div id="top-card" class="card" style="font-size: 24px; padding: 25px 20px; line-height: 1.2;">-</div>
+            <p id="active-suit-indicator" style="font-weight: bold; margin-top: 5px; color: #ffeb3b;"></p>
+        </div>
+
+        <div class="table-panel" style="min-width: 320px;">
+            <h3>🏆 Family League Table</h3>
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Wins</th>
+                        <th>Losses</th>
+                    </tr>
+                </thead>
+                <tbody id="league-rows">
+                    <tr><td colspan="3" style="color: #aaa;">No matches tracked yet.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="hand-container">
+        <h3>Your Hand</h3>
+        <div id="my-hand"></div>
+        <br>
+        <button onclick="playSelected()" id="play-btn" disabled>Play Cards</button>
+        <button onclick="drawOrResolve()" id="action-draw-btn">Draw Card</button>
+        
+        <div id="queen-actions" style="display:none; margin-top: 15px;">
+            <p style="color: #ffeb3b; font-weight: bold;">👑 You played a Queen! Select a suit to completely cascade dump:</p>
+            <button onclick="cascade('Hearts')">♥ Hearts</button>
+            <button onclick="cascade('Diamonds')">♦ Diamonds</button>
+            <button onclick="cascade('Clubs')">♣ Clubs</button>
+            <button onclick="cascade('Spades')">♠ Spades</button>
+        </div>
+    </div>
+
+    <h4>Live Match Timeline:</h4>
+    <div id="game-log-box"></div>
+
+    <script>
+        const socket = io();
+        let selectedCards = []; 
+        let currentHand = [];
+        let globalState = null;
+        let myTurn = false;
+
+        function soundEffect(type) {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                const now = ctx.currentTime;
+
+                if (type === 'play') {
+                    osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+                    gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.15);
+                    osc.start(now); osc.stop(now + 0.15);
+                } else if (type === 'draw') {
+                    osc.type = 'sine'; osc.frequency.setValueAtTime(600, now);
+                    osc.frequency.linearRampToValueAtTime(300, now + 0.12);
+                    gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0, now + 0.12);
+                    osc.start(now); osc.stop(now + 0.12);
+                } else if (type === 'penalty') {
+                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(180, now);
+                    osc.frequency.linearRampToValueAtTime(90, now + 0.3);
+                    gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                    osc.start(now); osc.stop(now + 0.3);
+                } else if (type === 'start') {
+                    osc.type = 'square'; osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.1); osc.frequency.setValueAtTime(783.99, now + 0.2);
+                    gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.35);
+                    osc.start(now); osc.stop(now + 0.35);
+                } else if (type === 'victory') {
+                    osc.type = 'square'; osc.frequency.setValueAtTime(587.33, now);
+                    osc.frequency.setValueAtTime(880, now + 0.15); osc.frequency.setValueAtTime(1174.66, now + 0.3);
+                    gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0, now + 0.6);
+                    osc.start(now); osc.stop(now + 0.6);
+                }
+            } catch (e) {}
+        }
+
+        socket.on('play_sound', (data) => { soundEffect(data.type); });
+
+        socket.on('state_update', (state) => {
+            globalState = state;
+            if (state.is_started) {
+                document.getElementById('lobby-controls').style.display = 'none';
+                document.getElementById('turn-indicator').innerText = `Current Turn: ${state.current_player}`;
+                myTurn = (socket.id === state.current_player_sid);
+            } else {
+                document.getElementById('lobby-controls').style.display = 'block';
+                document.getElementById('turn-indicator').innerText = `Lobby Stage (Game not started)`;
+                myTurn = false;
+            }
+            
+            if (state.penalty > 0) {
+                document.getElementById('penalty-tracker').innerText = `⚠️ Active Chain: Stacked +${state.penalty} (${state.penalty_type}s)`;
+            } else {
+                document.getElementById('penalty-tracker').innerText = "No active penalties.";
+            }
+
+            const alertBox = document.getElementById('personal-penalty-alert');
+            const drawBtn = document.getElementById('action-draw-btn');
+            
+            if (state.penalty > 0 && myTurn) {
+                alertBox.style.display = 'block';
+                drawBtn.innerText = `Accept Penalty (+${state.penalty} Cards)`;
+                drawBtn.style.background = '#d9534f';
+                
+                if (state.penalty_type === '2') {
+                    document.getElementById('penalty-alert-text').innerHTML = `You are facing a <b>+${state.penalty} card penalty</b>! Play a <b>2</b> to stack it, or accept the cards.`;
+                } else if (state.penalty_type === 'BJ') {
+                    document.getElementById('penalty-alert-text').innerHTML = `You are facing a <b>+${state.penalty} card penalty</b> from Black Jacks! Play a <b>Jack</b> to defend/counter, or accept the cards.`;
+                }
+            } else {
+                alertBox.style.display = 'none';
+                drawBtn.innerText = "Draw Card";
+                drawBtn.style.background = '#e0a800';
+            }
+
+            const topCardDiv = document.getElementById('top-card');
+            const suitIndicator = document.getElementById('active-suit-indicator');
+            if (state.top_card) {
+                topCardDiv.innerText = `${state.top_card.value}\n${getSuitSymbol(state.top_card.suit)}`;
+                topCardDiv.className = `card ${['Hearts','Diamonds'].includes(state.top_card.suit) ? 'red' : ''}`;
+                
+                if (state.active_suit) {
+                    suitIndicator.innerText = `Active Suit: ${state.active_suit} ${getSuitSymbol(state.active_suit)}`;
+                } else {
+                    suitIndicator.innerText = "";
+                }
+                
+                document.getElementById('queen-actions').style.display = (state.top_card.value === 'Queen' && myTurn) ? 'block' : 'none';
+            } else {
+                suitIndicator.innerText = "";
+            }
+
+            // Render Table Roster & Last Card tracking tags
+            const list = document.getElementById('player-list');
+            list.innerHTML = '';
+            state.player_list.forEach(p => {
+                const li = document.createElement('li');
+                const isCurrent = (p === state.current_player) ? "⚡ (Active Turn)" : "";
+                
+                let statusText = "Ready in Lobby";
+                let lastCardBadge = "";
+                if (state.is_started && state.hand_sizes && state.hand_sizes[p] !== undefined) {
+                    const count = state.hand_sizes[p];
+                    statusText = `${count} cards`;
+                    if (count === 1) {
+                        lastCardBadge = ` <span class="last-card-warning">⚠️ [LAST CARD!]</span>`;
+                    }
+                }
+                
+                li.innerHTML = `👤 ${p}: ${statusText} ${isCurrent}${lastCardBadge}`;
+                if (p === state.current_player) li.style.color = '#ffeb3b';
+                list.appendChild(li);
+            });
+
+            // Render Career History League Score Rows
+            const leagueBody = document.getElementById('league-rows');
+            if (state.league_table && state.league_table.length > 0) {
+                leagueBody.innerHTML = '';
+                state.league_table.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td><b>${row.name}</b></td><td>${row.wins}</td><td>${row.losses}</td>`;
+                    leagueBody.appendChild(tr);
+                });
+            }
+
+            evaluateButtonAbilities();
+        });
+
+        socket.on('your_hand', (data) => {
+            currentHand = data.hand;
+            const handDiv = document.getElementById('my-hand');
+            handDiv.innerHTML = '';
+            selectedCards = []; 
+            
+            data.hand.forEach((card) => {
+                const cDiv = document.createElement('div');
+                cDiv.className = `card ${['Hearts','Diamonds'].includes(card.suit) ? 'red' : ''}`;
+                cDiv.innerText = `${card.value}\n${getSuitSymbol(card.suit)}`;
+                
+                const badge = document.createElement('span');
+                badge.className = 'badge';
+                cDiv.appendChild(badge);
+                
+                cDiv.onclick = () => {
+                    cDiv.classList.toggle('selected');
+                    if(cDiv.classList.contains('selected')) {
+                        selectedCards.push(card);
+                    } else {
+                        selectedCards = selectedCards.filter(c => !(c.value === card.value && c.suit === card.suit));
+                    }
+                    updateBadges(handDiv);
+                    evaluateButtonAbilities();
+                };
+                handDiv.appendChild(cDiv);
+            });
+            evaluateButtonAbilities();
+        });
+
+        function evaluateButtonAbilities() {
+            const playBtn = document.getElementById('play-btn');
+            if (!globalState || !globalState.is_started || !myTurn || selectedCards.length === 0) {
+                playBtn.disabled = true;
+                return;
+            }
+            playBtn.disabled = false;
+        }
+
+        function updateBadges(handDiv) {
+            const cardsInDOM = handDiv.getElementsByClassName('card');
+            for (let div of cardsInDOM) {
+                const b = div.getElementsByClassName('badge')[0];
+                const textLines = div.innerText.split('\n');
+                const val = textLines[0];
+                const suitSym = textLines[1];
+                
+                const idx = selectedCards.findIndex(c => c.value === val && getSuitSymbol(c.suit) === suitSym);
+                if (idx !== -1) {
+                    b.innerText = idx + 1;
+                }
+            }
+        }
+
+        socket.on('prompt_ace_suit', () => {
+            document.getElementById('ace-modal').style.display = 'flex';
+        });
+
+        socket.on('game_log', (data) => {
+            const logBox = document.getElementById('game-log-box');
+            logBox.innerHTML += `<div>${data.msg}</div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        });
+
+        function joinGame() {
+            const name = document.getElementById('username').value.trim();
+            if (!name) { alert("Please enter a name!"); return; }
+            socket.emit('join_game', { name: name });
+            document.getElementById('setup-panel').style.display = 'none';
+            soundEffect('play');
+        }
+
+        function startGame() { socket.emit('start_match'); }
+
+        function playSelected() {
+            if (selectedCards.length === 0) return;
+            socket.emit('play_cards', { cards: selectedCards });
+        }
+
+        function selectAceSuit(suit) {
+            socket.emit('declare_ace_suit', { suit: suit });
+            document.getElementById('ace-modal').style.display = 'none';
+        }
+
+        function drawOrResolve() { socket.emit('take_penalty_or_draw'); }
+        function cascade(suit) { socket.emit('queen_cascade', { suit: suit }); }
+        function getSuitSymbol(suit) { return suit === 'Hearts' ? '♥' : suit === 'Diamonds' ? '♦' : suit === 'Clubs' ? '♣' : '♠'; }
+
+        socket.on('error', (data) => { alert(data.msg); });
+        socket.on('game_over', (data) => { alert(`🎉 MATCH OVER! ${data.winner} won the round!`); });
+    </script>
+</body>
+</html>
