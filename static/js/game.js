@@ -2,6 +2,7 @@ const socket = io();
 let currentHand = [];
 let selectedCards = [];
 let globalState = {};
+let lastPenalized = { name: null, amount: 0 };
 
 // Custom sorting rules to respect your layout sequence: 2-10, Ace, Queen, King, Jack
 const RANK_HIERARCHY = {
@@ -100,7 +101,7 @@ function updateBadges(container) {
             const shortVal = sc.value === 'Ace' ? 'A' : sc.value === 'Jack' ? 'J' : sc.value === 'Queen' ? 'Q' : sc.value === 'King' ? 'K' : sc.value;
             
             if(rawText.includes(shortVal) && rawText.includes(SUIT_EMOJIS[sc.suit])) {
-                if(element.classList.contains('selected') && !element.querySelector('.badge').innerText) {
+                if(element.classList.contains('selected')) {
                     element.querySelector('.badge').innerText = idx + 1;
                     break;
                 }
@@ -116,7 +117,7 @@ function updateBadges(container) {
 
 function playSelected() {
     if (selectedCards.length === 0) return;
-    socket.emit('play_cards', { cards: selectedCards });
+    socket.emit('play_cards', { cards: selectedCards.slice() });
 }
 
 function drawOrResolve() {
@@ -250,17 +251,44 @@ socket.on('state_update', (state) => {
         const row = document.createElement('div');
         row.className = 'player-row';
         if(state.is_started && state.current_player === p) row.classList.add('active-turn');
-        
+
         const cardCount = state.hand_sizes[p] || 0;
         let pLabel = (p === clientName) ? `<b>${p} (You)</b>` : p;
-        
+
+        const isLast = state.is_started && cardCount === 1;
+        const lastIcon = isLast ? `<span class="last-card-icon" title="Last Card">🔥</span>` : '';
+
+        const rightControls = (p !== clientName && state.is_started) ? `<button class="nudge-btn" onclick="triggerNudge('${p}')">⏰</button>` : '';
+
+        // If there's an active penalty, highlight the current_player as the penalty target
+        const isPenalized = state.penalty > 0 && state.current_player === p;
+        const penaltyIcon = isPenalized ? `<span class="penalty-indicator" title="Penalty: +${state.penalty}">⚠️ +${state.penalty}</span>` : '';
+
+        if (isPenalized) row.classList.add('penalty-target');
+
         row.innerHTML = `
             <div class="player-meta">
-                <span>${pLabel} ${state.is_started ? `🃏 (${cardCount} left)` : '⏳ Ready'}</span>
-                ${(p !== clientName && state.is_started) ? `<button class="nudge-btn" onclick="triggerNudge('${p}')">⏰</button>` : ''}
+                <span>${pLabel} ${state.is_started ? `🃏 (${cardCount} left)` : '⏳ Ready'} ${lastIcon} ${penaltyIcon}</span>
+                ${rightControls}
             </div>
         `;
         listContainer.appendChild(row);
+
+        // Trigger a brief personal visual when *you* are the penalized player, but only when it changes
+        if (isPenalized && p === clientName) {
+            if (lastPenalized.name !== clientName || lastPenalized.amount !== state.penalty) {
+                showToast(`⚠️ You have a penalty of +${state.penalty}!`);
+                document.body.classList.add('penalty-flash');
+                setTimeout(() => document.body.classList.remove('penalty-flash'), 1000);
+                lastPenalized.name = clientName;
+                lastPenalized.amount = state.penalty;
+            }
+        }
+        if (!isPenalized && lastPenalized.name === p) {
+            // penalty cleared
+            lastPenalized.name = null;
+            lastPenalized.amount = 0;
+        }
     });
 
     // Refresh Global Career Scoreboard Metrics
@@ -306,6 +334,18 @@ function closeGameOverModal() {
     document.getElementById('game-over-modal').style.display = 'none';
 }
 
+// Expose core UI handlers globally for inline onclick attributes
+window.organizeHand = organizeHand;
+window.playSelected = playSelected;
+window.drawOrResolve = drawOrResolve;
+window.selectAceSuit = selectAceSuit;
+window.cascade = cascade;
+window.triggerNudge = triggerNudge;
+window.resetGame = resetGame;
+window.closeGameOverModal = closeGameOverModal;
+window.joinGame = joinGame;
+window.startGame = startGame;
+
 socket.on('receive_nudge', (data) => {
     showToast(`⏰ NUDGE from ${data.sender}! Speed up!`);
     document.body.classList.add('wobble-effect');
@@ -325,4 +365,95 @@ function showToast(message) {
 
 function soundEffect(type) {
     console.log(`Tactile Operational Execution: ${type}`);
+}
+
+function resetGame() {
+    const name = document.getElementById('username').value.trim();
+    if(!name) {
+        showToast('Enter your name to request a reset.');
+        return;
+    }
+    if(!confirm('Are you sure you want to reset the current match? This will clear hands but keep league stats.')) return;
+    socket.emit('reset_match');
+}
+
+socket.on('room_reset', (data) => {
+    showToast(data.msg || 'Match reset.');
+    // Close any open modals and clear hand UI
+    document.getElementById('ace-modal').style.display = 'none';
+    document.getElementById('game-over-modal').style.display = 'none';
+    currentHand = [];
+    renderRearrangedHand();
+});
+
+// Notification when cards are received (drawn) — includes penalty draws
+socket.on('received_cards', (data) => {
+    const count = data.count || 0;
+    const reason = data.reason || '';
+    const isPenalty = reason && reason.indexOf('penalty') !== -1;
+    const source = data.source || null;
+    const msg = isPenalty
+        ? (source ? `You received ${count} penalty card(s) from ${source}.` : `You received ${count} penalty card(s).`)
+        : `You received ${count} card(s).`;
+
+    showToast(msg);
+    const logBox = document.getElementById('game-log-box');
+    logBox.innerHTML += `<div>📥 ${msg}</div>`;
+    logBox.scrollTop = logBox.scrollHeight;
+
+    // brief visual on the hand area
+    const handContainer = document.getElementById('hand-container');
+    if (handContainer) {
+        handContainer.classList.add('hand-receive-flash');
+        setTimeout(() => handContainer.classList.remove('hand-receive-flash'), 900);
+    }
+    // animate small floating cards into the hand
+    animateReceivedCards(count, data.cards || [], isPenalty);
+});
+
+function animateReceivedCards(count, cards, isPenalty) {
+    const maxShow = 6;
+    const toShow = Math.min(count, maxShow);
+    const sourceEl = document.getElementById('top-card') || document.getElementById('turn-badge-container');
+    const targetEl = document.getElementById('my-hand') || document.getElementById('hand-container');
+    const srcRect = sourceEl ? sourceEl.getBoundingClientRect() : { left: window.innerWidth/2, top: 60 };
+    const tgtRect = targetEl ? targetEl.getBoundingClientRect() : { left: window.innerWidth/2, top: window.innerHeight - 140 };
+
+    for (let i = 0; i < toShow; i++) {
+        const el = document.createElement('div');
+        el.className = 'floating-card small';
+        el.style.left = (srcRect.left + (srcRect.width/2) - 22) + 'px';
+        el.style.top = (srcRect.top + (srcRect.height/2) - 32) + 'px';
+        el.innerText = i === toShow - 1 && count > maxShow ? `+${count - (maxShow-1)}` : (cards[i] ? (cards[i].value === 'Ace' ? 'A' : cards[i].value[0]) : '🂠');
+
+        if (i === toShow - 1 && count > maxShow) {
+            const badge = document.createElement('div');
+            badge.className = 'floating-count';
+            badge.innerText = `+${count - (maxShow-1)}`;
+            el.appendChild(badge);
+        }
+
+        document.body.appendChild(el);
+
+        // force reflow so transition applies
+        // eslint-disable-next-line no-unused-expressions
+        el.offsetHeight;
+
+        const offsetX = (tgtRect.left + tgtRect.width/2) - (srcRect.left + (srcRect.width/2));
+        const offsetY = (tgtRect.top + tgtRect.height/2) - (srcRect.top + (srcRect.height/2));
+        const rotate = (Math.random() * 40) - 20;
+        const scale = 0.7 + Math.random() * 0.4;
+
+        // stagger animation slightly
+        setTimeout(() => {
+            el.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale}) rotate(${rotate}deg)`;
+            el.style.opacity = '0.95';
+        }, i * 70);
+
+        // remove after transition
+        setTimeout(() => {
+            el.classList.add('fade-out');
+            setTimeout(() => { try { document.body.removeChild(el); } catch (e) {} }, 300);
+        }, 900 + i * 70);
+    }
 }

@@ -32,6 +32,7 @@ h1 { font-size: 1.8rem; margin: 10px 0; }
 #table { 
     display: flex; 
     flex-direction: column;
+    flex-wrap: wrap;
     gap: 12px;
     margin: 10px 0; 
     background: #143d1f; 
@@ -45,6 +46,10 @@ h1 { font-size: 1.8rem; margin: 10px 0; }
     border-radius: 8px; 
     width: 100%;
     box-sizing: border-box;
+}
+
+.hand-panel {
+    width: 100%;
 }
 
 /* Player Rows & Nudges */
@@ -164,6 +169,17 @@ h1 { font-size: 1.8rem; margin: 10px 0; }
 .discard-wrapper .card .suit-center { font-size: 38px; }
 
 /* Buttons & Inputs */
+.panel-heading {
+    font-size: 1.15rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #f4f1b3;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.45);
+    border-bottom: 1px solid rgba(255,235,59,0.25);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+}
+
 button { 
     background: #e0a800; 
     border: none; 
@@ -193,6 +209,146 @@ button:disabled { background: #4a544c !important; color: #888 !important; cursor
 .last-card-warning { color: #ff3b30; font-weight: bold; animation: blinker 1s linear infinite; }
 @keyframes blinker { 50% { opacity: 0; } }
 
+/* Last-card icon next to player names */
+.last-card-icon {
+    display: inline-block;
+    margin-left: 8px;
+    background: #ff3b30;
+    color: white;
+    padding: 3px 6px;
+    border-radius: 12px;
+    font-weight: 900;
+    font-size: 12px;
+    line-height: 1;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    animation: lastPulse 1s ease-in-out infinite;
+}
+
+@keyframes lastPulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.12); opacity: 0.4; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* Penalty visual indicators */
+.penalty-indicator {
+    display: inline-block;
+    margin-left: 8px;
+    background: linear-gradient(90deg,#ff7043,#d32f2f);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 12px;
+    box-shadow: 0 4px 12px rgba(211,47,47,0.35), inset 0 -2px 6px rgba(0,0,0,0.2);
+    animation: penaltyPulse 1s ease-in-out infinite;
+}
+
+@keyframes penaltyPulse {
+    0% { transform: translateY(0) scale(1); opacity: 1; }
+    50% { transform: translateY(-3px) scale(1.05); opacity: 0.6; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.player-row.penalty-target {
+    border-left-color: #ff5252 !important;
+    box-shadow: 0 4px 18px rgba(255,82,82,0.12);
+    background: linear-gradient(90deg, rgba(255,82,82,0.03), rgba(0,0,0,0.12));
+}
+
+/* Brief screen flash when you receive a penalty */
+.penalty-flash {
+    animation: penaltyScreen 0.9s ease-in-out 1;
+}
+
+.league-details {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    padding: 0;
+}
+
+.league-details summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 12px 14px;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    background: rgba(255,235,59,0.08);
+    color: #ffeb3b;
+    border-radius: 10px;
+    margin: 0;
+}
+
+.league-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.league-details summary::after {
+    content: '▾';
+    float: right;
+    transition: transform 0.2s ease;
+}
+
+.league-details[open] summary::after {
+    transform: rotate(180deg);
+}
+
+.league-content {
+    padding: 12px 14px 14px;
+}
+
+.league-details:not([open]) .league-content {
+    display: none;
+}
+@keyframes penaltyScreen {
+    0% { box-shadow: none; }
+    20% { box-shadow: inset 0 0 60px rgba(255,82,82,0.22); }
+    100% { box-shadow: none; }
+}
+
+/* Flash animation when receiving cards */
+.hand-receive-flash {
+    animation: receiveFlash 0.9s ease-in-out 1;
+}
+@keyframes receiveFlash {
+    0% { box-shadow: none; transform: translateY(0); }
+    30% { box-shadow: 0 0 30px rgba(0,200,255,0.12) inset; transform: translateY(-6px); }
+    100% { box-shadow: none; transform: translateY(0); }
+}
+
+/* Floating mini-card animation for received cards */
+.floating-card {
+    position: fixed;
+    width: 44px;
+    height: 64px;
+    background: white;
+    color: black;
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    z-index: 3000;
+    transform-origin: center center;
+    transition: transform 700ms cubic-bezier(.2,.9,.2,1), opacity 700ms ease-in;
+}
+.floating-card.small { width: 36px; height: 52px; font-size: 12px; }
+.floating-card.fade-out { opacity: 0; }
+.floating-count {
+    position: absolute;
+    bottom: -10px;
+    right: -8px;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 900;
+}
+
 #personal-penalty-alert { display: none; background: #7c1515; border: 2px dashed #ff3b30; border-radius: 10px; padding: 12px; margin: 10px auto; max-width: 600px; }
 #game-log-box { background: rgba(0,0,0,0.4); text-align: left; max-width: 100%; margin: 10px auto; padding: 12px; border-radius: 8px; height: 90px; overflow-y: auto; font-family: monospace; font-size: 12px; }
 
@@ -213,6 +369,7 @@ button:disabled { background: #4a544c !important; color: #888 !important; cursor
     h1 { font-size: 2.3rem; }
     #table { flex-direction: row; justify-content: space-around; padding: 20px; }
     .table-panel { width: 33%; min-width: 260px; }
+    .hand-panel { width: 100%; min-width: auto; order: 4; }
     #my-hand { justify-content: center; overflow-x: visible; flex-wrap: wrap; }
     button { padding: 10px 20px; font-size: 16px; }
     #game-log-box { height: 125px; }

@@ -74,11 +74,12 @@
     
     <div class="lobby-actions" id="lobby-controls">
         <button onclick="startGame()" style="width: 100%; margin: 4px 0;">🚀 Start Match</button>
+        <button onclick="resetGame()" style="width: 100%; margin: 4px 0; background: #b02a37; color: white;">🧹 Reset Match</button>
     </div>
 </div>
 
         <div class="table-panel">
-            <h3>Discard Pile</h3>
+            <h3 class="panel-heading">Card in Play</h3>
             <div class="discard-wrapper">
                 <div id="top-card" class="card">
                     <div class="pip-tl">-</div>
@@ -89,40 +90,44 @@
             <p id="active-suit-indicator" style="font-weight: bold; margin-top: 5px; color: #ffeb3b; font-size: 14px;"></p>
         </div>
 
+        <div class="table-panel hand-panel">
+            <h3 class="panel-heading" style="margin: 5px 0;">Your Hand</h3>
+            
+            <div style="margin-bottom: 8px;">
+                <button type="button" onclick="organizeHand('shuffle')" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Mix Order</button>
+                <button type="button" onclick="organizeHand('sort')" style="background: #2b5c8f; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">📊 Sort (Suit & Rank)</button>
+            </div>
+
+            <div id="my-hand"></div>
+            
+            <div style="margin-top: 5px;">
+                <button onclick="playSelected()" id="play-btn" disabled>Play Cards</button>
+                <button onclick="drawOrResolve()" id="action-draw-btn">Draw Card</button>
+            </div>
+            
+            <div id="queen-actions" style="display:none; margin-top: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
+                <p style="color: #ffeb3b; font-weight: bold; margin: 0 0 5px 0; font-size: 14px;">👑 Queen Cascade Dump Suit:</p>
+                <button onclick="cascade('Hearts')" style="padding: 6px 12px; font-size: 13px;">♥</button>
+                <button onclick="cascade('Diamonds')" style="padding: 6px 12px; font-size: 13px;">♦</button>
+                <button onclick="cascade('Clubs')" style="padding: 6px 12px; font-size: 13px;">♣</button>
+                <button onclick="cascade('Spades')" style="padding: 6px 12px; font-size: 13px;">♠</button>
+            </div>
+        </div>
+
         <div class="table-panel">
-            <h3>🏆 League Table</h3>
-            <table class="league-table">
-                <thead>
-                    <tr><th>Player</th><th>W</th><th>L</th></tr>
-                </thead>
-                <tbody id="league-rows">
-                    <tr><td colspan="3" style="color: #aaa;">No matches tracked.</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div id="hand-container">
-        <h3 style="margin: 5px 0;">Your Hand</h3>
-        
-        <div style="margin-bottom: 8px;">
-            <button onclick="organizeHand('shuffle')" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Mix Order</button>
-            <button onclick="organizeHand('sort')" style="background: #2b5c8f; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">📊 Sort (Suit & Rank)</button>
-        </div>
-
-        <div id="my-hand"></div>
-        
-        <div style="margin-top: 5px;">
-            <button onclick="playSelected()" id="play-btn" disabled>Play Cards</button>
-            <button onclick="drawOrResolve()" id="action-draw-btn">Draw Card</button>
-        </div>
-        
-        <div id="queen-actions" style="display:none; margin-top: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
-            <p style="color: #ffeb3b; font-weight: bold; margin: 0 0 5px 0; font-size: 14px;">👑 Queen Cascade Dump Suit:</p>
-            <button onclick="cascade('Hearts')" style="padding: 6px 12px; font-size: 13px;">♥</button>
-            <button onclick="cascade('Diamonds')" style="padding: 6px 12px; font-size: 13px;">♦</button>
-            <button onclick="cascade('Clubs')" style="padding: 6px 12px; font-size: 13px;">♣</button>
-            <button onclick="cascade('Spades')" style="padding: 6px 12px; font-size: 13px;">♠</button>
+            <details class="league-details" open>
+                <summary>🏆 League Table</summary>
+                <div class="league-content">
+                    <table class="league-table">
+                        <thead>
+                            <tr><th>Player</th><th>W</th><th>L</th></tr>
+                        </thead>
+                        <tbody id="league-rows">
+                            <tr><td colspan="3" style="color: #aaa;">No matches tracked.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </details>
         </div>
     </div>
 

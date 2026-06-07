@@ -41,6 +41,8 @@ class FamilyBlackjackEngine:
         # Career League Standings Data
         self.league_wins = {}
         self.league_losses = {}
+        # Track which player caused the current accumulated penalty (if any)
+        self.penalty_source = None
 
     def reset_lobby(self):
         """Reset the match room engine back to baseline factory defaults."""
@@ -57,8 +59,27 @@ class FamilyBlackjackEngine:
         self.active_penalty_type = None
         self.accumulated_penalty = 0
         self.declared_ace_suit = None
+        self.penalty_source = None
         # Note: We intentionally DO NOT clear league_wins or league_losses
         # so career family stats persist across separate game room lobbies!
+
+    def reset_match(self):
+        """Reset only the active match state but keep lobby players and career stats.
+
+        This preserves `players`, `league_wins`, and `league_losses` so the
+        room roster and career table remain intact while clearing the current
+        match (hands, deck, discard pile, penalties, and started flag).
+        """
+        self.deck = []
+        self.discard_pile = []
+        self.hands = {name: [] for name in self.players}
+        self.current_turn_index = 0
+        self.direction = 1
+        self.is_started = False
+        self.active_penalty_type = None
+        self.accumulated_penalty = 0
+        self.declared_ace_suit = None
+        self.penalty_source = None
 
     def build_deck(self):  # pylint: disable=no-self-use
         """Construct a fresh 52-card deck array and shuffle it.
@@ -115,6 +136,7 @@ class FamilyBlackjackEngine:
         self.active_penalty_type = None
         self.accumulated_penalty = 0
         self.declared_ace_suit = None
+        self.penalty_source = None
         self.is_started = True
 
         # --- ROTATION LOGIC ---
@@ -172,11 +194,13 @@ class FamilyBlackjackEngine:
 
         current_name = self.get_current_player_name()
         if not self.has_valid_penalty_counter(current_name):
-            self.draw_card(current_name, self.accumulated_penalty)
+            self.draw_card(current_name, self.accumulated_penalty, reason='penalty_auto')
             log_msg = (
                 f"💥 {current_name} had no counter cards "
                 f"and auto-drew {self.accumulated_penalty} cards!"
             )
+            if getattr(self, 'penalty_source', None):
+                log_msg += f" (caused by {self.penalty_source})"
             socketio.emit(
                 'game_log', {'msg': log_msg}, room='game_room'
             )
@@ -187,13 +211,14 @@ class FamilyBlackjackEngine:
 
             self.accumulated_penalty = 0
             self.active_penalty_type = None
+            self.penalty_source = None
 
             self.current_turn_index = (
                 self.current_turn_index + self.direction
             ) % len(self.players)
             self.check_and_enforce_autodraw()
 
-    def draw_card(self, name, count=1):
+    def draw_card(self, name, count=1, reason=None):
         """Move card units safely from the deck entity to a player's hand array.
 
         Args:
@@ -223,6 +248,15 @@ class FamilyBlackjackEngine:
                 drawn.append(self.deck.pop())
         if name in self.hands:
             self.hands[name].extend(drawn)
+        # Notify the receiving player's client about the drawn cards
+        if drawn:
+            target_sid = self.name_to_sid.get(name)
+            payload = {'count': len(drawn), 'cards': drawn, 'reason': reason}
+            # include penalty source if applicable
+            if reason and 'penalty' in (reason or ''):
+                payload['source'] = getattr(self, 'penalty_source', None)
+            if target_sid:
+                socketio.emit('received_cards', payload, to=target_sid)
         return drawn
 
     def update_league_results(self, winner_name):
@@ -283,25 +317,23 @@ class FamilyBlackjackEngine:
         temp_accumulated = self.accumulated_penalty
         first_card = matched_cards[0]
 
-        if temp_accumulated > 0:
-            if temp_penalty_type == '2' and first_card['value'] != '2':
-                return False, "Your starting defense card must be a 2!", 0
-            if temp_penalty_type == 'BJ' and first_card['value'] != 'Jack':
-                return False, "Your starting defense card must be a Jack!", 0
-        else:
-            is_valid_match = (
-                first_card['suit'] == active_suit or
-                first_card['value'] == active_val or
-                first_card['value'] == 'Ace'
+        is_valid_match = (
+            first_card['suit'] == active_suit or
+            first_card['value'] == active_val or
+            first_card['value'] == 'Ace'
+        )
+        if not is_valid_match:
+            err_msg = (
+                f"First card must match active suit ({active_suit}) "
+                f"or value ({active_val})."
             )
-            if not is_valid_match:
-                err_msg = (
-                    f"First card must match active suit ({active_suit}) "
-                    f"or value ({active_val})."
-                )
-                return False, err_msg, 0
+            return False, err_msg, 0
 
         eight_skips = 0
+        first_chain_card = matched_cards[0]
+        first_chain_suit = first_chain_card['suit']
+        first_chain_is_queen = first_chain_card['value'] == 'Queen'
+
         for card_idx, card in enumerate(matched_cards):
             is_bj = (
                 card['value'] == 'Jack' and
@@ -315,30 +347,53 @@ class FamilyBlackjackEngine:
 
             if card_idx > 0:
                 prev_card = matched_cards[card_idx - 1]
-                is_chain_valid = (
-                    card['suit'] == prev_card['suit'] or
-                    card['value'] == prev_card['value'] or
-                    card['value'] == 'Ace'
+                is_same_rank = card['value'] == prev_card['value']
+                is_ace = card['value'] == 'Ace'
+                is_suit_chain = (
+                    first_chain_is_queen and card['suit'] == first_chain_suit
                 )
+
+                is_chain_valid = is_same_rank or is_ace or is_suit_chain
                 if not is_chain_valid:
-                    return False, f"Chain broken at position {card_idx + 1}.", 0
-                if temp_accumulated > 0:
-                    if temp_penalty_type == '2' and not is_two:
-                        return False, "You can only stack 2s during penalty.", 0
-                    if temp_penalty_type == 'BJ' and not (is_bj or is_rj):
-                        return False, "You can only stack Jacks during penalty.", 0
+                    return False, (
+                        f"You cannot do that at position {card_idx + 1}. "
+                        "You need a Queen before continuing with same-suit cards."
+                    ), 0
 
             if card['value'] == '8':
                 eight_skips += 1
-            if is_two:
-                temp_penalty_type = '2'
-                temp_accumulated += 2
-            elif is_bj:
-                temp_penalty_type = 'BJ'
-                temp_accumulated += 5
-            elif is_rj and temp_penalty_type == 'BJ':
-                temp_penalty_type = None
-                temp_accumulated = 0
+
+        last_card = matched_cards[-1]
+        last_is_bj = (
+            last_card['value'] == 'Jack' and
+            last_card['suit'] in ['Spades', 'Clubs']
+        )
+        last_is_rj = (
+            last_card['value'] == 'Jack' and
+            last_card['suit'] in ['Hearts', 'Diamonds']
+        )
+        last_is_two = (last_card['value'] == '2')
+
+        previous_penalty_type = temp_penalty_type
+
+        if temp_accumulated > 0:
+            if temp_penalty_type == '2' and not last_is_two:
+                return False, "Your last card must be a 2 to counter the penalty!", 0
+            if temp_penalty_type == 'BJ' and not (last_is_bj or last_is_rj):
+                return False, "Your final card must be a Jack to counter the penalty!", 0
+
+        if last_is_two:
+            temp_penalty_type = '2'
+            temp_accumulated = temp_accumulated + 2 if previous_penalty_type == '2' else 2
+            self.penalty_source = name
+        elif last_is_bj:
+            temp_penalty_type = 'BJ'
+            temp_accumulated = temp_accumulated + 5 if previous_penalty_type == 'BJ' else 5
+            self.penalty_source = name
+        elif last_is_rj and temp_penalty_type == 'BJ':
+            temp_penalty_type = None
+            temp_accumulated = 0
+            self.penalty_source = None
 
         self.active_penalty_type = temp_penalty_type
         self.accumulated_penalty = temp_accumulated
@@ -468,6 +523,7 @@ def handle_play(data):
             game.accumulated_penalty = 0
             game.active_penalty_type = None
             game.declared_ace_suit = None
+            game.penalty_source = None
 
             socketio.emit('game_over', {'winner': name}, room='game_room')
             socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
@@ -529,6 +585,21 @@ def handle_ace_suit(data):
     broadcast_state()
 
 
+@socketio.on('reset_match')
+def handle_reset_match():
+    """Reset only the active match while preserving lobby roster and career stats."""
+    sid = request.sid
+    requester = game.sid_to_name.get(sid)
+    if not requester:
+        emit('error', {'msg': 'You must be in the lobby to reset the match.'})
+        return
+
+    game.reset_match()
+    socketio.emit('game_log', {'msg': f"🧹 {requester} reset the current match."}, room='game_room')
+    socketio.emit('room_reset', {'msg': 'Match has been reset by a player.'}, room='game_room')
+    broadcast_state()
+
+
 @socketio.on('queen_cascade')
 def handle_cascade(data):
     """Execute sequence cleanouts on active Queen states."""
@@ -551,6 +622,7 @@ def handle_cascade(data):
             game.accumulated_penalty = 0
             game.active_penalty_type = None
             game.declared_ace_suit = None
+            game.penalty_source = None
 
             socketio.emit('game_over', {'winner': name}, room='game_room')
             socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
@@ -583,19 +655,22 @@ def handle_draw():
             f"🏳️ {name} accepted the penalty and "
             f"drew {game.accumulated_penalty} cards."
         )
+        if getattr(game, 'penalty_source', None):
+            log_msg += f" (caused by {game.penalty_source})"
         socketio.emit(
             'game_log', {'msg': log_msg}, room='game_room'
         )
-        game.draw_card(name, game.accumulated_penalty)
+        game.draw_card(name, game.accumulated_penalty, reason='penalty_manual')
         game.accumulated_penalty = 0
         game.active_penalty_type = None
+        game.penalty_source = None
     else:
         socketio.emit(
             'game_log',
             {'msg': f"🎴 {name} drew a single card."},
             room='game_room'
         )
-        game.draw_card(name, 1)
+        game.draw_card(name, 1, reason='draw')
 
     game.advance_turn()
     broadcast_state()
