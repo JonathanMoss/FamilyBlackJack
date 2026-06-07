@@ -1,6 +1,6 @@
 import random
 import os
-from flask import Flask, render_template, request, send_from_directory, session
+from flask import Flask, render_template, request, session
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
@@ -30,6 +30,24 @@ class FamilyBlackjackEngine:
         # Career League Standings Data
         self.league_wins = {}   
         self.league_losses = {} 
+
+    def reset_lobby(self):
+        """Resets the entire match room engine back to baseline factory defaults."""
+        self.players = []
+        self.sid_to_name = {}
+        self.name_to_sid = {}
+        self.hands = {}
+        self.deck = []
+        self.discard_pile = []
+        self.current_turn_index = 0
+        self.direction = 1      
+        self.is_started = False
+        self.match_dealer_index = -1
+        self.active_penalty_type = None  
+        self.accumulated_penalty = 0     
+        self.declared_ace_suit = None   
+        # Note: We intentionally DO NOT clear self.league_wins or self.league_losses 
+        # so career family stats persist across separate game room lobbies!
 
     def build_deck(self):
         suits = ['Hearts', 'Diamonds', 'Clubs', 'Spades']
@@ -67,14 +85,9 @@ class FamilyBlackjackEngine:
         self.declared_ace_suit = None
         self.is_started = True
 
-        # --- ROTATION LOGIC START ---
-        # Advance dealer position clockwise by 1 element
+        # --- ROTATION LOGIC ---
         self.match_dealer_index = (self.match_dealer_index + 1) % len(self.players)
-        
-        # The player directly clockwise from the dealer acts first
         self.current_turn_index = (self.match_dealer_index + 1) % len(self.players)
-        # -----------------------------
-        
         return True
 
     def get_current_player_name(self):
@@ -229,10 +242,6 @@ game = FamilyBlackjackEngine()
 def index():
     return render_template('index.html')
 
-@app.route('/templates/<filename>')
-def serve_static_js(filename):
-    return send_from_directory(os.path.join(app.root_path, 'templates'), filename)
-
 @socketio.on('join_game')
 def handle_join(data):
     sid = request.sid
@@ -380,6 +389,34 @@ def handle_nudge(data):
     target_sid = game.name_to_sid.get(target_name)
     if target_sid:
         socketio.emit('receive_nudge', {'sender': sender_name, 'emoji': emoji}, to=target_sid)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    sid = request.sid
+    name = game.sid_to_name.get(sid)
+    
+    if name:
+        if name in game.name_to_sid:
+            del game.name_to_sid[name]
+        if sid in game.sid_to_name:
+            del game.sid_to_name[sid]
+            
+        if name in game.players:
+            if not game.is_started:
+                game.players.remove(name)
+                if name in game.hands:
+                    del game.hands[name]
+                socketio.emit('game_log', {'msg': f"❌ {name} left the lobby."}, room='game_room')
+            else:
+                socketio.emit('game_log', {'msg': f"🔌 {name} disconnected (Went Offline)."}, room='game_room')
+
+        # Wipes room data completely if no clients are mapped to names
+        if len(game.sid_to_name) == 0:
+            print("🚨 LOBBY EMPTY DETECTED: Automated room reset executed.")
+            game.reset_lobby()
+            socketio.emit('game_log', {'msg': "🧹 Room automatically reset because all players left."}, room='game_room')
+        
+        broadcast_state()
 
 def broadcast_state():
     active_suit = game.declared_ace_suit

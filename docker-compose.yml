@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  blackjack-game:
+    build: .
+    container_name: family_blackjack_app
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_ENV=development
+    restart: always
