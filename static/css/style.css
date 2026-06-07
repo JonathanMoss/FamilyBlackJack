@@ -217,3 +217,90 @@ button:disabled { background: #4a544c !important; color: #888 !important; cursor
     button { padding: 10px 20px; font-size: 16px; }
     #game-log-box { height: 125px; }
 }
+
+/* --- PREMIUM MATCH STATUS COMPONENT --- */
+.status-dashboard {
+    background: linear-gradient(145deg, #1b4522, #0f3018);
+    border: 2px solid #3d7e48;
+    box-shadow: inset 0 2px 4px rgba(255,255,255,0.05), 0 8px 16px rgba(0,0,0,0.4);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    text-align: left;
+}
+
+.status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.turn-badge {
+    background: #141715;
+    border-left: 4px solid #ffcb05;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: monospace;
+    color: #e0e0e0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.turn-badge.my-turn {
+    border-left-color: #00ff66;
+    background: linear-gradient(90deg, #102a18, #141715);
+    box-shadow: 0 0 10px rgba(0, 255, 102, 0.2);
+}
+
+/* Battle Alert Banner for Stacking Penalties */
+.battle-banner {
+    display: none;
+    background: linear-gradient(45deg, #7a1515, #b71c1c);
+    border: 1px solid #ff5252;
+    border-radius: 6px;
+    padding: 10px;
+    color: white;
+    font-weight: bold;
+    font-size: 13px;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    box-shadow: 0 4px 10px rgba(183, 28, 28, 0.4);
+    animation: pulseGlow 1.5s infinite alternate;
+}
+
+@keyframes pulseGlow {
+    0% { box-shadow: 0 4px 10px rgba(183, 28, 28, 0.3); }
+    100% { box-shadow: 0 4px 18px rgba(255, 82, 82, 0.6); }
+}
+
+.battle-banner .ammo-count {
+    background: #ffffff;
+    color: #b71c1c;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+/* Subtle Animated Turn Timer bar placeholder */
+.timer-track {
+    width: 100%;
+    background: rgba(255,255,255,0.1);
+    height: 4px;
+    border-radius: 2px;
+    margin-top: 6px;
+    overflow: hidden;
+}
+.timer-bar {
+    width: 100%;
+    height: 100%;
+    background: #ffcb05;
+    transition: width 0.3s ease;
+}
+.turn-badge.my-turn .timer-bar {
+    background: #00ff66;
+}
+

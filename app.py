@@ -288,11 +288,18 @@ def handle_play(data):
         cards_desc = ", ".join([f"{c['value']} of {c['suit']}" for c in cards])
         socketio.emit('game_log', {'msg': f"📝 {name} played a chain: {cards_desc}"}, room='game_room')
         
+        # 🏁 CRITICAL FIX: VICTORY POSITION CLEANUP
         if len(game.hands.get(name, [])) == 0:
             game.update_league_results(name)
+            
+            # Immediately neutralize matching metrics to break any lingering background autodraw cycles
+            game.is_started = False
+            game.accumulated_penalty = 0
+            game.active_penalty_type = None
+            game.declared_ace_suit = None
+            
             socketio.emit('game_over', {'winner': name}, room='game_room')
             socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
-            game.is_started = False
             broadcast_state()
             return
 
@@ -345,9 +352,13 @@ def handle_cascade(data):
         
         if len(game.hands.get(name, [])) == 0:
             game.update_league_results(name)
+            game.is_started = False
+            game.accumulated_penalty = 0
+            game.active_penalty_type = None
+            game.declared_ace_suit = None
+            
             socketio.emit('game_over', {'winner': name}, room='game_room')
             socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
-            game.is_started = False
         else:
             if len(game.hands.get(name, [])) == 1:
                 socketio.emit('game_log', {'msg': f"📢 🔥 LAST CARD! {name} is down to their final card!"}, room='game_room')
@@ -410,7 +421,6 @@ def handle_disconnect():
             else:
                 socketio.emit('game_log', {'msg': f"🔌 {name} disconnected (Went Offline)."}, room='game_room')
 
-        # Wipes room data completely if no clients are mapped to names
         if len(game.sid_to_name) == 0:
             print("🚨 LOBBY EMPTY DETECTED: Automated room reset executed.")
             game.reset_lobby()

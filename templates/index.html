@@ -45,17 +45,37 @@
 
     <div id="table">
         <div class="table-panel">
-            <h3>Match Status</h3>
-            <p id="turn-indicator" style="color: #ffeb3b; font-weight: bold;">Waiting for players...</p>
-            <p id="penalty-tracker" style="font-size: 14px;">No active penalties.</p>
-            
-            <h4 style="margin: 10px 0 5px 0;">Players & Nudges:</h4>
-            <div id="player-list-box"></div>
-            
-            <div class="lobby-actions" id="lobby-controls">
-                <button onclick="startGame()" style="width: 100%;">🚀 Start Match</button>
+    <div class="status-dashboard">
+        <div class="status-row">
+            <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #8cb993; font-weight: bold;">Lobby Status Monitor</span>
+            <span id="game-status-dot" style="width: 8px; height: 8px; background: #dc3545; border-radius: 50%; display: inline-block;"></span>
+        </div>
+        
+        <div id="turn-badge-container" class="turn-badge">
+            <div style="display: flex; justify-content: space-between; font-weight: bold;">
+                <span id="turn-message">Awaiting entries...</span>
+            </div>
+            <div class="timer-track">
+                <div id="turn-timer" class="timer-bar" style="width: 100%;"></div>
             </div>
         </div>
+
+        <div id="battle-strike-banner" class="battle-banner">
+            <span class="ammo-count" id="battle-ammo-value">+0</span>
+            <div>
+                <div style="text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; opacity: 0.8;">Active Strike Damage Stack</div>
+                <div id="battle-type-text" style="font-size: 12px;">Defend immediately!</div>
+            </div>
+        </div>
+    </div>
+    
+    <h4 style="margin: 10px 0 6px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #a3cfa9;">Active Table Roster</h4>
+    <div id="player-list-box"></div>
+    
+    <div class="lobby-actions" id="lobby-controls">
+        <button onclick="startGame()" style="width: 100%; margin: 4px 0;">🚀 Start Match</button>
+    </div>
+</div>
 
         <div class="table-panel">
             <h3>Discard Pile</h3>
@@ -84,7 +104,14 @@
 
     <div id="hand-container">
         <h3 style="margin: 5px 0;">Your Hand</h3>
+        
+        <div style="margin-bottom: 8px;">
+            <button onclick="organizeHand('shuffle')" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Mix Order</button>
+            <button onclick="organizeHand('sort')" style="background: #2b5c8f; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">📊 Sort (Suit & Rank)</button>
+        </div>
+
         <div id="my-hand"></div>
+        
         <div style="margin-top: 5px;">
             <button onclick="playSelected()" id="play-btn" disabled>Play Cards</button>
             <button onclick="drawOrResolve()" id="action-draw-btn">Draw Card</button>
