@@ -204,7 +204,7 @@ class FamilyBlackjackEngine:
         if not self.has_valid_penalty_counter(current_name):
             self.draw_card(current_name, self.accumulated_penalty, reason='penalty_auto')
             log_msg = (
-                f"💥 {current_name} had no counter cards "
+                f"💥 {current_name} had no defence cards "
                 f"and auto-drew {self.accumulated_penalty} cards!"
             )
             if getattr(self, 'penalty_source', None):
@@ -281,7 +281,7 @@ class FamilyBlackjackEngine:
                 self.register_league_player(name)
                 self.league_losses[name] += 1
 
-    # pylint: disable=too-many-locals,too-many-return-statements,too-many-branches
+    # pylint: disable=too-many-locals,too-many-return-statements,too-many-branches,too-many-statements
     def validate_and_play_move(self, name, selected_cards):
         """Process legal game plays against rules and active penalties.
 
@@ -332,7 +332,7 @@ class FamilyBlackjackEngine:
         )
         if not is_valid_match:
             err_msg = (
-                f"First card must match active suit ({active_suit}) "
+                f"First card must be a ({active_suit}) "
                 f"or value ({active_val})."
             )
             return False, err_msg, 0
@@ -343,16 +343,6 @@ class FamilyBlackjackEngine:
         first_chain_is_queen = first_chain_card['value'] == 'Queen'
 
         for card_idx, card in enumerate(matched_cards):
-            is_bj = (
-                card['value'] == 'Jack' and
-                card['suit'] in ['Spades', 'Clubs']
-            )
-            is_rj = (
-                card['value'] == 'Jack' and
-                card['suit'] in ['Hearts', 'Diamonds']
-            )
-            is_two = (card['value'] == '2')
-
             if card_idx > 0:
                 prev_card = matched_cards[card_idx - 1]
                 is_same_rank = card['value'] == prev_card['value']
@@ -364,7 +354,7 @@ class FamilyBlackjackEngine:
                 is_chain_valid = is_same_rank or is_ace or is_suit_chain
                 if not is_chain_valid:
                     return False, (
-                        f"You cannot do that at position {card_idx + 1}. "
+                        "You cannot do that! "
                         "You need a Queen before continuing with same-suit cards."
                     ), 0
 
@@ -504,21 +494,24 @@ def handle_start():
             starter_sid = game.name_to_sid.get(starter_name)
             if starter_sid:
                 socketio.emit('prompt_ace_suit', {}, to=starter_sid)
+            ace_msg = f"🔮 The first card is an Ace! {starter_name} must declare the active suit."
             socketio.emit(
                 'game_log',
-                {'msg': f"🔮 The first card is an Ace! {starter_name} must declare the active suit before play continues."},
+                {'msg': ace_msg},
                 room='game_room'
             )
         elif game.active_penalty_type == '2':
+            two_msg = f"⚠️ The first card is a 2! {starter_name} must counter it or draw +2 cards."
             socketio.emit(
                 'game_log',
-                {'msg': f"⚠️ The first card is a 2! {starter_name} must counter it or draw +2 cards."},
+                {'msg': two_msg},
                 room='game_room'
             )
         elif game.active_penalty_type == 'BJ':
+            bj_msg = f"⚠️ Black Jack! {starter_name} must counter or draw +5."
             socketio.emit(
                 'game_log',
-                {'msg': f"⚠️ The first card is a black Jack! {starter_name} must counter it or draw +5 cards."},
+                {'msg': bj_msg},
                 room='game_room'
             )
 

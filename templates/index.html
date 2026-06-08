@@ -13,7 +13,7 @@
 
     <div id="toast-notification"></div>
 
-    <h1>♠️ Family Blackjack 🃏</h1>
+    <h1>♠ Family Black Jack ♣</h1>
     
     <div id="setup-panel">
         <input type="text" id="username" placeholder="Enter Your Name">
@@ -34,7 +34,7 @@
         <div class="modal-content" style="border-color: #e0a800;">
             <h1 style="color: #ffeb3b; margin-top: 0; font-size: 24px;">🏆 MATCH OVER! 🏆</h1>
             <p id="game-over-text" style="font-size: 16px; margin: 15px 0; font-weight: bold;"></p>
-            <button onclick="closeGameOverModal()" style="width:100%;">Back to Dashboard</button>
+            <button onclick="closeGameOverModal()" style="width:100%;">Back to Game!</button>
         </div>
     </div>
 
@@ -47,7 +47,7 @@
         <div class="table-panel">
     <div class="status-dashboard">
         <div class="status-row">
-            <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #8cb993; font-weight: bold;">Lobby Status Monitor</span>
+            <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #8cb993; font-weight: bold;">Lobby Status</span>
             <span id="game-status-dot" style="width: 8px; height: 8px; background: #dc3545; border-radius: 50%; display: inline-block;"></span>
         </div>
         
@@ -69,12 +69,12 @@
         </div>
     </div>
     
-    <h4 style="margin: 10px 0 6px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #a3cfa9;">Active Table Roster</h4>
+    <h4 style="margin: 10px 0 6px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; color: #a3cfa9;">Active Players</h4>
     <div id="player-list-box"></div>
     
     <div class="lobby-actions" id="lobby-controls">
-        <button onclick="startGame()" style="width: 100%; margin: 4px 0;">🚀 Start Match</button>
-        <button onclick="resetGame()" style="width: 100%; margin: 4px 0; background: #b02a37; color: white;">🧹 Reset Match</button>
+        <button onclick="startGame()" style="width: 100%; margin: 4px 0;">🚀 Start Game</button>
+        <button onclick="resetGame()" style="width: 100%; margin: 4px 0; background: #b02a37; color: white;">🧹 Reset Game</button>
     </div>
 </div>
 
@@ -94,14 +94,14 @@
             <h3 class="panel-heading" style="margin: 5px 0;">Your Hand</h3>
             
             <div style="margin-bottom: 8px;">
-                <button type="button" onclick="organizeHand('shuffle')" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Mix Order</button>
+                <button type="button" onclick="organizeHand('shuffle')" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Randomise Hand Order</button>
                 <button type="button" onclick="organizeHand('sort')" style="background: #2b5c8f; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">📊 Sort (Suit & Rank)</button>
             </div>
 
             <div id="my-hand"></div>
             
             <div style="margin-top: 5px;">
-                <button onclick="playSelected()" id="play-btn" disabled>Play Cards</button>
+                <button onclick="playSelected()" id="play-btn" disabled>Play Card(s)</button>
                 <button onclick="drawOrResolve()" id="action-draw-btn">Draw Card</button>
             </div>
             
@@ -123,7 +123,7 @@
                             <tr><th>Player</th><th>W</th><th>L</th></tr>
                         </thead>
                         <tbody id="league-rows">
-                            <tr><td colspan="3" style="color: #aaa;">No matches tracked.</td></tr>
+                            <tr><td colspan="3" style="color: #aaa;">No Game tracked.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -131,7 +131,7 @@
         </div>
     </div>
 
-    <h4 style="text-align: left; margin: 15px 0 5px 0; font-size: 14px;">Live Match Timeline:</h4>
+    <h4 style="text-align: left; margin: 15px 0 5px 0; font-size: 14px;">Live Game Events:</h4>
     <div id="game-log-box"></div>
 
     <script src="/static/js/game.js"></script>
