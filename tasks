@@ -1,0 +1,1 @@
+1) When a game starts, the first card needs additional consideration. if its an Ace, then the player who is going first should be prompted to change the suit, as they do when it is played in normal play. also, if a 2 or black J is turned over as the first card, this should affect the first player.

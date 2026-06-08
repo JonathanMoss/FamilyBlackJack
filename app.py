@@ -137,6 +137,14 @@ class FamilyBlackjackEngine:
         self.accumulated_penalty = 0
         self.declared_ace_suit = None
         self.penalty_source = None
+
+        if starter['value'] == '2':
+            self.active_penalty_type = '2'
+            self.accumulated_penalty = 2
+        elif starter['value'] == 'Jack' and starter['suit'] in ['Clubs', 'Spades']:
+            self.active_penalty_type = 'BJ'
+            self.accumulated_penalty = 5
+
         self.is_started = True
 
         # --- ROTATION LOGIC ---
@@ -490,6 +498,30 @@ def handle_start():
             room='game_room'
         )
         socketio.emit('play_sound', {'type': 'shuffle'}, room='game_room')
+
+        first_card = game.discard_pile[-1]
+        if first_card['value'] == 'Ace':
+            starter_sid = game.name_to_sid.get(starter_name)
+            if starter_sid:
+                socketio.emit('prompt_ace_suit', {}, to=starter_sid)
+            socketio.emit(
+                'game_log',
+                {'msg': f"🔮 The first card is an Ace! {starter_name} must declare the active suit before play continues."},
+                room='game_room'
+            )
+        elif game.active_penalty_type == '2':
+            socketio.emit(
+                'game_log',
+                {'msg': f"⚠️ The first card is a 2! {starter_name} must counter it or draw +2 cards."},
+                room='game_room'
+            )
+        elif game.active_penalty_type == 'BJ':
+            socketio.emit(
+                'game_log',
+                {'msg': f"⚠️ The first card is a black Jack! {starter_name} must counter it or draw +5 cards."},
+                room='game_room'
+            )
+
         broadcast_state()
     else:
         emit('error', {'msg': 'Need at least 2 players to start!'})
