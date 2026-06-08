@@ -192,7 +192,7 @@ socket.on('state_update', (state) => {
         
         if (state.current_player === clientName) {
             turnContainer.classList.add('my-turn');
-            turnMessage.innerHTML = `⚔️ <span><b>YOUR TURN!</b> Drop your combo.</span>`;
+            turnMessage.innerHTML = `⚔️ <span><b>YOUR TURN!</b> Play your hand.</span>`;
             document.getElementById('turn-timer').style.width = '100%'; 
         } else {
             turnContainer.classList.remove('my-turn');
