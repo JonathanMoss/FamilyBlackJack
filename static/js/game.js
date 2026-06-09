@@ -188,7 +188,14 @@ socket.on('state_update', (state) => {
     } else {
         statusDot.style.background = '#00ff66'; // Glowing Live Emerald Green
         
-        if (state.current_player === clientName) {
+        const myHandSize = state.hand_sizes[clientName] || 0;
+        const isSpectator = myHandSize === 0;
+
+        if (isSpectator) {
+            turnContainer.classList.remove('my-turn');
+            turnMessage.innerHTML = `👀 <span><b>Spectating:</b> Waiting for next round...</span>`;
+            document.getElementById('turn-timer').style.width = '0%';
+        } else if (state.current_player === clientName) {
             turnContainer.classList.add('my-turn');
             turnMessage.innerHTML = `⚔️ <span><b>YOUR TURN!</b> Play your hand.</span>`;
             document.getElementById('turn-timer').style.width = '100%'; 
@@ -250,6 +257,9 @@ socket.on('state_update', (state) => {
         const cardCount = state.hand_sizes[p] || 0;
         let pLabel = (p === clientName) ? `<b>${p} (You)</b>` : p;
 
+        const isSpectating = state.is_started && cardCount === 0;
+        const statusText = isSpectating ? '👁️ Spectating' : `🃏 (${cardCount} left)`;
+
         const isLast = state.is_started && cardCount === 1;
         const lastIcon = isLast ? `<span class="last-card-icon" title="Last Card">🔥</span>` : '';
 
@@ -263,7 +273,7 @@ socket.on('state_update', (state) => {
 
         row.innerHTML = `
             <div class="player-meta">
-                <span>${pLabel} ${state.is_started ? `🃏 (${cardCount} left)` : '⏳ Ready'} ${lastIcon} ${penaltyIcon}</span>
+                <span>${pLabel} ${state.is_started ? statusText : '⏳ Ready'} ${lastIcon} ${penaltyIcon}</span>
                 ${rightControls}
             </div>
         `;

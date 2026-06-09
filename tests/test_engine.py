@@ -84,7 +84,7 @@ def test_start_game_with_ace_first_card_sets_no_penalty_and_deals_hands(monkeypa
         {'suit': 'Diamonds', 'value': 'Queen'}, # Alice 3rd card
         {'suit': 'Spades', 'value': 'King'}, # Bob 2nd card
         {'suit': 'Hearts', 'value': 'Ace'}, # Alice 2nd card
-        {'suit': 'Clubs', 'value': '2'},   # Bob 1st card
+        {'suit': 'Clubs', 'value': '3'},   # Bob 1st card
         {'suit': 'Diamonds', 'value': '3'}, # Alice 1st card
     ])
 
@@ -115,7 +115,7 @@ def test_start_game_with_first_card_two_applies_initial_two_penalty(monkeypatch)
 
     fixed_deck = build_fixed_deck([
         {'suit': 'Diamonds', 'value': '2'},  # Starter card should be 2
-        {'suit': 'Clubs', 'value': '3'},
+        {'suit': 'Hearts', 'value': '2'},    # Bob counter-card
         {'suit': 'Hearts', 'value': '4'},
         {'suit': 'Spades', 'value': '5'},
         {'suit': 'Hearts', 'value': '6'},
@@ -127,7 +127,7 @@ def test_start_game_with_first_card_two_applies_initial_two_penalty(monkeypatch)
         {'suit': 'Diamonds', 'value': 'Queen'},
         {'suit': 'Spades', 'value': 'King'},
         {'suit': 'Hearts', 'value': 'Ace'},
-        {'suit': 'Clubs', 'value': '3'},
+        {'suit': 'Clubs', 'value': '4'},
         {'suit': 'Diamonds', 'value': '4'},
     ])
     monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: fixed_deck)
@@ -148,7 +148,7 @@ def test_start_game_with_first_card_black_jack_applies_initial_bj_penalty(monkey
 
     fixed_deck = build_fixed_deck([
         {'suit': 'Spades', 'value': 'Jack'},  # Starter card should be a black Jack
-        {'suit': 'Clubs', 'value': '3'},
+        {'suit': 'Clubs', 'value': 'Jack'},   # Bob counter-card
         {'suit': 'Hearts', 'value': '4'},
         {'suit': 'Spades', 'value': '5'},
         {'suit': 'Hearts', 'value': '6'},
@@ -160,7 +160,7 @@ def test_start_game_with_first_card_black_jack_applies_initial_bj_penalty(monkey
         {'suit': 'Diamonds', 'value': '3'},
         {'suit': 'Spades', 'value': '4'},
         {'suit': 'Hearts', 'value': '5'},
-        {'suit': 'Clubs', 'value': '6'},
+        {'suit': 'Clubs', 'value': '7'},
         {'suit': 'Diamonds', 'value': '7'},
     ])
     monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: fixed_deck)
@@ -256,7 +256,7 @@ def test_check_and_enforce_autodraw_forces_draw_when_no_counter():
     game.accumulated_penalty = 2
     
     # Bob has no 2s in hand.
-    game.hands = {'Alice': [], 'Bob': [{'suit': 'Spades', 'value': 'King'}]}
+    game.hands = {'Alice': [{'suit': 'Hearts', 'value': '5'}], 'Bob': [{'suit': 'Spades', 'value': 'King'}]}
     game.deck = [{'suit': 'Clubs', 'value': '5'}, {'suit': 'Clubs', 'value': '6'}]
 
     game.check_and_enforce_autodraw()
@@ -352,6 +352,40 @@ def test_validate_and_play_move_queen_chain_with_rank_match_at_end():
     
     assert success is True
     assert len(game.hands['Alice']) == 0
+
+def test_validate_and_play_move_queen_suit_chain_with_user_example():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.discard_pile = [{'suit': 'Hearts', 'value': '5'}] # Starting card
+    game.hands = {'Alice': [
+        {'suit': 'Hearts', 'value': 'Queen'},
+        {'suit': 'Hearts', 'value': '3'},
+        {'suit': 'Hearts', 'value': '4'},
+        {'suit': 'Spades', 'value': '4'}
+    ]}
+    game.current_turn_index = 0 # Alice's turn
+
+    selected_cards = [
+        {'suit': 'Hearts', 'value': 'Queen'},
+        {'suit': 'Hearts', 'value': '3'},
+        {'suit': 'Hearts', 'value': '4'},
+        {'suit': 'Spades', 'value': '4'}
+    ]
+
+    success, msg, skips = game.validate_and_play_move('Alice', selected_cards)
+
+    assert success is True, f"Move failed: {msg}"
+    assert msg == 'Success'
+    assert skips == 0
+    assert len(game.hands['Alice']) == 0 # All cards played
+    assert game.discard_pile[-1] == {'suit': 'Spades', 'value': '4'} # Last card played
+    assert game.discard_pile == [
+        {'suit': 'Hearts', 'value': '5'}, # Original top card
+        {'suit': 'Hearts', 'value': 'Queen'},
+        {'suit': 'Hearts', 'value': '3'},
+        {'suit': 'Hearts', 'value': '4'},
+        {'suit': 'Spades', 'value': '4'}
+    ]
 
 def test_draw_card_reshuffles_when_deck_is_empty():
     game = FamilyBlackjackEngine()

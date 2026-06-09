@@ -85,8 +85,9 @@ def game_with_players(engine, players):
     engine.players = player_names_list
     engine.is_started = True
     engine.deck = engine.build_deck()
-    # Initialize hands as empty; specific cards will be added by 'set_hand' steps.
-    engine.hands = {p: [] for p in engine.players}
+    # Initialize hands with a dummy card so they aren't skipped as spectators.
+    # Specific cards will be added or overwritten by 'set_hand' steps.
+    engine.hands = {p: [{'suit': 'Spades', 'value': 'King'}] for p in engine.players}
     engine.active_penalty_type = None
     engine.accumulated_penalty = 0
     engine.penalty_source = None

@@ -143,6 +143,9 @@ class FamilyBlackjackEngine:
         self.match_dealer_index = (self.match_dealer_index + 1) % len(self.players)
         self.current_turn_index = (self.match_dealer_index + 1) % len(self.players)
 
+        self.is_started = True
+        self._skip_spectators()
+
         if starter['value'] == '2':
             self.active_penalty_type = '2'
             self.accumulated_penalty = 2
@@ -150,12 +153,11 @@ class FamilyBlackjackEngine:
             self.active_penalty_type = 'BJ'
             self.accumulated_penalty = 5
         elif starter['value'] == '8':
-            # If the first card is an 8, the first player is skipped.
-            # The turn moves from (dealer + 1) to (dealer + 2).
-            self.current_turn_index = (self.current_turn_index + 1) % len(self.players)
+            # Skip the first active player
+            self.advance_turn(steps=1)
+            return True
 
-        self.is_started = True
-
+        self.check_and_enforce_autodraw()
         return True
 
     def get_current_player_name(self):
@@ -166,17 +168,23 @@ class FamilyBlackjackEngine:
         """
         return self.players[self.current_turn_index] if self.players else None
 
-    def advance_turn(self, steps=1):
-        """Pass turn control down the user tracking registry.
+    def _skip_spectators(self):
+        """Helper to ensure current_turn_index points to an active player with cards."""
+        if not self.players or not self.is_started:
+            return
+        attempts = 0
+        while (not self.hands.get(self.players[self.current_turn_index]) and 
+               attempts < len(self.players)):
+            self.current_turn_index = (self.current_turn_index + self.direction) % len(self.players)
+            attempts += 1
 
-        Args:
-            steps (int): Total indices to bypass (default 1).
-        """
+    def advance_turn(self, steps=1):
+        """Pass turn control down the user tracking registry, skipping spectators."""
         if not self.players:
             return
-        self.current_turn_index = (
-            self.current_turn_index + (steps * self.direction)
-        ) % len(self.players)
+        for _ in range(steps):
+            self.current_turn_index = (self.current_turn_index + self.direction) % len(self.players)
+            self._skip_spectators()
         self.check_and_enforce_autodraw()
 
     def has_valid_penalty_counter(self, name):
@@ -223,10 +231,7 @@ class FamilyBlackjackEngine:
             self.active_penalty_type = None
             self.penalty_source = None
 
-            self.current_turn_index = (
-                self.current_turn_index + self.direction
-            ) % len(self.players)
-            self.check_and_enforce_autodraw()
+            self.advance_turn(steps=1)
 
     def draw_card(self, name, count=1, reason=None):
         """Move card units safely from the deck entity to a player's hand array.
@@ -347,13 +352,11 @@ class FamilyBlackjackEngine:
 
         top_card = self.discard_pile[-1]
         is_ace_active = self.declared_ace_suit and top_card['value'] == 'Ace'
-        active_suit = (
-            self.declared_ace_suit if is_ace_active else top_card['suit']
-        )
+        is_table_queen = top_card['value'] == 'Queen'
+        active_suit = self.declared_ace_suit if is_ace_active else top_card['suit']
         active_val = top_card['value']
 
         # Pre-calculate intended penalty enforcement.
-        # If the turn started with a penalty, the player MUST end their chain with a valid counter.
         last_card = matched_cards[-1]
         last_is_bj = (last_card['value'] == 'Jack' and last_card['suit'] in ['Spades', 'Clubs'])
         last_is_rj = (last_card['value'] == 'Jack' and last_card['suit'] in ['Hearts', 'Diamonds'])
@@ -383,21 +386,27 @@ class FamilyBlackjackEngine:
 
         eight_skips = 0
         first_chain_card = matched_cards[0]
-        first_chain_suit = first_chain_card['suit']
-        first_chain_is_queen = first_chain_card['value'] == 'Queen'
+        # Determine if we are in a "Queen Dump" state (either started by this play or the table)
+        is_dump_active = first_chain_card['value'] == 'Queen' or is_table_queen
+        dump_suit = first_chain_card['suit'] if first_chain_card['value'] == 'Queen' else active_suit
 
         for card_idx, card in enumerate(matched_cards):
             if card_idx > 0:
                 prev_card = matched_cards[card_idx - 1]
+                
+                # A card is valid in a chain if:
+                # 1. It matches the rank of the previous card
+                # 2. It matches the suit of the previous card
+                # 3. It is an Ace (wildcard)
+                # 4. It matches the suit of the Queen dump
                 is_same_rank = card['value'] == prev_card['value']
+                is_same_suit = card['suit'] == prev_card['suit']
                 is_ace = card['value'] == 'Ace'
-                is_suit_chain = (
-                    first_chain_is_queen and card['suit'] == first_chain_suit
-                )
+                is_suit_chain = is_dump_active and card['suit'] == dump_suit
 
-                is_chain_valid = is_same_rank or is_ace or is_suit_chain
+                is_chain_valid = is_same_rank or is_same_suit or is_ace or is_suit_chain
                 if not is_chain_valid:
-                    return False, "Chain invalid: subsequent cards must match rank, be an Ace, or follow a Queen of the same suit.", 0
+                    return False, "Chain invalid: subsequent cards must match rank, suit, be an Ace, or follow a Queen dump.", 0
 
             if card['value'] == '8':
                 eight_skips += 1
@@ -483,9 +492,11 @@ def handle_join(data):
     session['username'] = name
 
     if name not in game.players:
-        if game.is_started:
-            return emit('error', {'msg': 'Match already running!'})
         game.players.append(name)
+        game.hands[name] = [] # Initialize empty hand for spectator status
+        if game.is_started:
+            socketio.emit('game_log', 
+                         {'msg': f"👁️ {name} joined as an observer and will play in the next match."}, room='game_room')
 
     game.sid_to_name[sid] = name
     game.name_to_sid[name] = sid
