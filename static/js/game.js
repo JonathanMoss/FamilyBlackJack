@@ -18,6 +18,7 @@ function joinGame() {
         showToast("Please enter a username!");
         return;
     }
+    localStorage.setItem('blackjack_player_name', name);
     socket.emit('join_game', { name: name });
 }
 
@@ -389,6 +390,16 @@ function initLobbyVisuals() {
         frame.className = 'card image-card';
         const imgPath = `/static/images/ace_of_spades.png`;
         frame.innerHTML = `<img src="${imgPath}" class="card-img" alt="Ace of Spades Placeholder">`;
+    }
+
+    // Auto-join if a name was previously saved
+    const savedName = localStorage.getItem('blackjack_player_name');
+    if (savedName) {
+        const nameInput = document.getElementById('username');
+        if (nameInput) {
+            nameInput.value = savedName;
+            socket.emit('join_game', { name: savedName });
+        }
     }
 }
 initLobbyVisuals();

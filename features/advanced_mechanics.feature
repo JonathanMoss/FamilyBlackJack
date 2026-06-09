@@ -48,3 +48,9 @@ Feature: Advanced Gameplay Mechanics
     And Bob has "5 of Spades" and "5 of Diamonds" in hand
     When Bob attempts to play "5 of Spades"
     Then the play should be rejected with message "First card must be a (Diamonds)"
+
+  Scenario: Starting a match with one player adds a computer opponent
+    Given a lobby has only one player "Alice"
+    When the game starts
+    Then "Alice" should have 7 cards
+    And "🤖 Computer" should have 7 cards

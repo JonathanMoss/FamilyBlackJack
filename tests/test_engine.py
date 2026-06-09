@@ -51,7 +51,7 @@ if 'flask_socketio' not in sys.modules:
     socketio_stub.join_room = lambda *args, **kwargs: None
     sys.modules['flask_socketio'] = socketio_stub
 
-from app import FamilyBlackjackEngine
+from app import FamilyBlackjackEngine, BOT_NAME
 
 
 def build_fixed_deck(card_order):
@@ -386,6 +386,22 @@ def test_validate_and_play_move_queen_suit_chain_with_user_example():
         {'suit': 'Hearts', 'value': '4'},
         {'suit': 'Spades', 'value': '4'}
     ]
+
+def test_start_game_adds_bot_for_solo_player(monkeypatch):
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice']
+    
+    # Mock deck with enough cards for 2 players (7 each + 1 starter = 15 minimum)
+    mock_deck = [{'suit': 'Spades', 'value': 'Ace'}] * 52
+    monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: mock_deck)
+
+    success = game.start_game()
+
+    assert success is True
+    assert BOT_NAME in game.players
+    assert len(game.players) == 2
+    assert len(game.hands['Alice']) == 7
+    assert len(game.hands[BOT_NAME]) == 7
 
 def test_draw_card_reshuffles_when_deck_is_empty():
     game = FamilyBlackjackEngine()

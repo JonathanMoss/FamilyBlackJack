@@ -13,6 +13,8 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'blackjack_family_secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+BOT_NAME = "🤖 Computer"
+
 
 # pylint: disable=too-many-instance-attributes
 class FamilyBlackjackEngine:
@@ -116,6 +118,11 @@ class FamilyBlackjackEngine:
         Returns:
             bool: True if game initialization succeeds, False otherwise.
         """
+        # Automatically add a computer player if someone starts alone
+        if len(self.players) == 1:
+            if BOT_NAME not in self.players:
+                self.players.append(BOT_NAME)
+
         if len(self.players) < 2:
             return False
         self.deck = self.build_deck()
@@ -506,6 +513,92 @@ def handle_join(data):
     return None
 
 
+def check_for_bot_turn():
+    """Determine if the current turn belongs to the computer and trigger AI logic."""
+    if not game.is_started:
+        return
+    current_player = game.get_current_player_name()
+    if current_player == BOT_NAME:
+        socketio.start_background_task(run_bot_logic)
+
+
+def run_bot_logic():
+    """Background task simulating computer thinking and decision making."""
+    socketio.sleep(1.5)  # Artificial delay for natural feel
+
+    if not game.is_started or game.get_current_player_name() != BOT_NAME:
+        return
+
+    # 1. Handle Ace Suit Declaration if the bot just played an Ace but hasn't declared
+    top_card = game.discard_pile[-1]
+    if top_card['value'] == 'Ace' and not game.declared_ace_suit:
+        hand = game.hands.get(BOT_NAME, [])
+        if not hand:
+            chosen_suit = "Spades"
+        else:
+            suits = [c['suit'] for c in hand]
+            chosen_suit = max(set(suits), key=suits.count)
+        
+        game.declared_ace_suit = chosen_suit
+        socketio.emit('game_log', {'msg': f"🔮 {BOT_NAME} set the active game suit to: {chosen_suit}!"}, room='game_room')
+        game.advance_turn()
+        broadcast_state()
+        check_for_bot_turn()
+        return
+
+    # 2. Decide on a move
+    hand = game.hands.get(BOT_NAME, [])
+    possible_play = None
+    
+    # Check for penalty counters specifically
+    if game.accumulated_penalty > 0:
+        if game.active_penalty_type == '2':
+            matches = [c for c in hand if c['value'] == '2']
+        else:
+            matches = [c for c in hand if c['value'] == 'Jack']
+        if matches:
+            possible_play = [matches[0]]
+    else:
+        # Regular turn logic
+        active_suit = game.declared_ace_suit if (game.declared_ace_suit and top_card['value'] == 'Ace') else top_card['suit']
+        active_val = top_card['value']
+        for c in hand:
+            if c['value'] == 'Ace' or c['value'] == active_val or c['suit'] == active_suit:
+                possible_play = [c]
+                break
+
+    if possible_play:
+        success, msg, skips = game.validate_and_play_move(BOT_NAME, possible_play)
+        if success:
+            socketio.emit('game_log', {'msg': f"📝 {BOT_NAME} played: {possible_play[0]['value']} of {possible_play[0]['suit']}"}, room='game_room')
+            
+            if len(game.hands.get(BOT_NAME, [])) == 0:
+                game.update_league_results(BOT_NAME)
+                game.is_started = False
+                socketio.emit('game_over', {'winner': BOT_NAME}, room='game_room')
+                broadcast_state()
+                return
+
+            if len(game.hands.get(BOT_NAME, [])) == 1:
+                socketio.emit('game_log', {'msg': f"📢 🔥 LAST CARD! {BOT_NAME} is down to their final card!"}, room='game_room')
+
+            game.advance_turn(steps=1 + skips)
+    else:
+        # Must draw
+        if game.accumulated_penalty > 0:
+            socketio.emit('game_log', {'msg': f"🏳️ {BOT_NAME} accepted the penalty and drew {game.accumulated_penalty} cards."}, room='game_room')
+            game.draw_card(BOT_NAME, game.accumulated_penalty, reason='penalty_manual')
+            game.accumulated_penalty = 0
+            game.active_penalty_type = None
+        else:
+            socketio.emit('game_log', {'msg': f"🎴 {BOT_NAME} drew a card."}, room='game_room')
+            game.draw_card(BOT_NAME, 1, reason='draw')
+        game.advance_turn()
+
+    broadcast_state()
+    check_for_bot_turn()
+
+
 @socketio.on('start_match')
 def handle_start():
     """Transition state parameters to live round execution modes."""
@@ -566,6 +659,7 @@ def handle_start():
             socketio.emit('game_log', {'msg': eight_msg}, room='game_room')
 
         broadcast_state()
+        check_for_bot_turn()
     else:
         emit('error', {'msg': 'Need at least 2 players to start!'})
 
@@ -635,6 +729,7 @@ def handle_play(data):
             if game.accumulated_penalty == 0 or is_penalty_chain:
                 game.advance_turn(steps=turn_steps)
             broadcast_state()
+            check_for_bot_turn()
     else:
         emit('error', {'msg': msg})
     return None
@@ -658,6 +753,7 @@ def handle_ace_suit(data):
     socketio.emit('play_sound', {'type': 'play'}, room='game_room')
     game.advance_turn()
     broadcast_state()
+    check_for_bot_turn()
 
 
 @socketio.on('reset_match')
@@ -717,6 +813,7 @@ def handle_cascade(data):
 
             game.advance_turn(steps=turn_steps)
         broadcast_state()
+        check_for_bot_turn()
     else:
         emit('error', {'msg': msg})
 
@@ -755,6 +852,7 @@ def handle_draw():
 
     game.advance_turn()
     broadcast_state()
+    check_for_bot_turn()
 
 
 @socketio.on('send_nudge')

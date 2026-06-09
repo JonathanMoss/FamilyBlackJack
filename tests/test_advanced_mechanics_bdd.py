@@ -43,7 +43,7 @@ if 'flask_socketio' not in sys.modules:
     socketio_stub.join_room = lambda *args, **kwargs: None
     sys.modules['flask_socketio'] = socketio_stub
 
-from app import FamilyBlackjackEngine
+from app import FamilyBlackjackEngine, BOT_NAME
 
 FEATURE_FILE = os.path.join(os.path.dirname(__file__), '..', 'features', 'advanced_mechanics.feature')
 
@@ -65,6 +65,9 @@ def test_autodraw_enforcement(): pass
 
 @scenario(FEATURE_FILE, 'Playing an Ace during the game forces the next player to follow the declared suit')
 def test_ace_suit_declaration_mid_game(): pass
+
+@scenario(FEATURE_FILE, 'Starting a match with one player adds a computer opponent')
+def test_solo_player_start_adds_bot(): pass
 
 def clean(text):
     return text.strip().strip('"') if text else text
@@ -96,6 +99,13 @@ def game_with_players(engine, players):
 @given(parsers.parse('it is "{name}"\'s turn'))
 def set_turn(game, name):
     game.current_turn_index = game.players.index(clean(name))
+
+@given(parsers.parse('a lobby has only one player "{name}"'), target_fixture='game')
+def solo_lobby_setup(engine, name, monkeypatch):
+    engine.players = [clean(name)]
+    # Force a deterministic deck to avoid flakiness from random power cards at start
+    monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: [{'suit': 'Spades', 'value': '3'}] * 52)
+    return engine
 
 @given(parsers.parse('the top card is "{card_spec}"'))
 def set_top_card(game, card_spec):
@@ -149,6 +159,10 @@ def execute_cascade(game, name, suit):
     assert success, f"Cascade failed: {msg}"
     game.advance_turn(steps=1 + skips)
 
+@when('the game starts')
+def start_game_action(game):
+    game.start_game()
+
 @when(parsers.parse('the turn advances to {name}'))
 def advance_to_bob(game, name):
     game.current_turn_index = game.players.index(clean(name))
@@ -156,6 +170,10 @@ def advance_to_bob(game, name):
 
 @then(parsers.parse('{name} should have {count:d} cards left'))
 def check_hand_count(game, name, count):
+    assert len(game.hands[clean(name)]) == count
+
+@then(parsers.parse('"{name}" should have {count:d} cards'))
+def check_player_hand_count(game, name, count):
     assert len(game.hands[clean(name)]) == count
 
 @then(parsers.parse('"{name}" should be the current player'))
