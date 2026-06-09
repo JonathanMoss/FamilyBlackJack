@@ -112,12 +112,32 @@ class FamilyBlackjackEngine:
         if name not in self.league_losses:
             self.league_losses[name] = 0
 
+    def add_player(self, name):
+        """Register a new player in the lobby and manage bot yield logic."""
+        if name not in self.players:
+            self.players.append(name)
+            self.hands[name] = []
+
+            # If the lobby is idle and we now have multiple humans, remove the bot
+            if not self.is_started:
+                human_players = [p for p in self.players if p != BOT_NAME]
+                if len(human_players) >= 2 and BOT_NAME in self.players:
+                    self.players.remove(BOT_NAME)
+                    return True
+        return False
+
     def start_game(self):
         """Boot up a brand new card round from the active lobby.
 
         Returns:
             bool: True if game initialization succeeds, False otherwise.
         """
+        # Clean up computer player if we have enough human players
+        human_players = [p for p in self.players if p != BOT_NAME]
+        if len(human_players) >= 2 and BOT_NAME in self.players:
+            self.players.remove(BOT_NAME)
+            socketio.emit('game_log', {'msg': f"{BOT_NAME} has left the table to make room for humans."}, room='game_room')
+
         # Automatically add a computer player if someone starts alone
         if len(self.players) == 1:
             if BOT_NAME not in self.players:
@@ -499,11 +519,13 @@ def handle_join(data):
     session['username'] = name
 
     if name not in game.players:
-        game.players.append(name)
-        game.hands[name] = [] # Initialize empty hand for spectator status
-        if game.is_started:
+        was_started = game.is_started
+        bot_yielded = game.add_player(name)
+        if was_started:
             socketio.emit('game_log', 
                          {'msg': f"👁️ {name} joined as an observer and will play in the next match."}, room='game_room')
+        elif bot_yielded:
+            socketio.emit('game_log', {'msg': f"{BOT_NAME} has left the table to make room for humans."}, room='game_room')
 
     game.sid_to_name[sid] = name
     game.name_to_sid[name] = sid

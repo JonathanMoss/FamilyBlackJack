@@ -69,6 +69,12 @@ def test_ace_suit_declaration_mid_game(): pass
 @scenario(FEATURE_FILE, 'Starting a match with one player adds a computer opponent')
 def test_solo_player_start_adds_bot(): pass
 
+@scenario(FEATURE_FILE, 'Computer player leaves when a second human joins an idle lobby')
+def test_bot_yield_on_join(): pass
+
+@scenario(FEATURE_FILE, 'Computer player yields when a match starts with enough humans')
+def test_bot_yield_on_start(): pass
+
 def clean(text):
     return text.strip().strip('"') if text else text
 
@@ -106,6 +112,10 @@ def solo_lobby_setup(engine, name, monkeypatch):
     # Force a deterministic deck to avoid flakiness from random power cards at start
     monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: [{'suit': 'Spades', 'value': '3'}] * 52)
     return engine
+
+@given(parsers.parse('"{name}" is in the lobby'))
+def add_player_to_lobby_direct(game, name):
+    game.add_player(clean(name))
 
 @given(parsers.parse('the top card is "{card_spec}"'))
 def set_top_card(game, card_spec):
@@ -159,6 +169,10 @@ def execute_cascade(game, name, suit):
     assert success, f"Cascade failed: {msg}"
     game.advance_turn(steps=1 + skips)
 
+@when(parsers.parse('"{name}" joins the lobby'))
+def join_lobby_action(game, name):
+    game.add_player(clean(name))
+
 @when('the game starts')
 def start_game_action(game):
     game.start_game()
@@ -175,6 +189,14 @@ def check_hand_count(game, name, count):
 @then(parsers.parse('"{name}" should have {count:d} cards'))
 def check_player_hand_count(game, name, count):
     assert len(game.hands[clean(name)]) == count
+
+@then(parsers.parse('"{name}" should not be in the lobby'))
+def check_player_not_in_lobby(game, name):
+    assert clean(name) not in game.players
+
+@then(parsers.parse('the lobby should have {count:d} players'))
+def check_lobby_count_final(game, count):
+    assert len(game.players) == count
 
 @then(parsers.parse('"{name}" should be the current player'))
 def check_current_player(game, name):

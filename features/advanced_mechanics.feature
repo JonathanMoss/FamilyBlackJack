@@ -54,3 +54,16 @@ Feature: Advanced Gameplay Mechanics
     When the game starts
     Then "Alice" should have 7 cards
     And "🤖 Computer" should have 7 cards
+
+  Scenario: Computer player leaves when a second human joins an idle lobby
+    Given a lobby has only one player "Alice"
+    And "🤖 Computer" is in the lobby
+    When "Bob" joins the lobby
+    Then "🤖 Computer" should not be in the lobby
+    And the lobby should have 2 players
+
+  Scenario: Computer player yields when a match starts with enough humans
+    Given a lobby has 3 players "Alice", "🤖 Computer", and "Bob"
+    When the game starts
+    Then "🤖 Computer" should not be in the lobby
+    And the lobby should have 2 players

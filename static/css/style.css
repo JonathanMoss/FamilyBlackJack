@@ -81,6 +81,7 @@ h1 { font-size: 1.8rem; margin: 10px 0; }
     box-sizing: border-box;
     box-shadow: 0 3px 7px rgba(0,0,0,0.4);
     cursor: pointer; 
+    flex-shrink: 0;
     
     /* Explicitly prefixed user-select engine properties */
     -webkit-user-select: none;  /* Mobile Safari / Chrome Webview */

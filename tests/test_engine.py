@@ -403,6 +403,33 @@ def test_start_game_adds_bot_for_solo_player(monkeypatch):
     assert len(game.hands['Alice']) == 7
     assert len(game.hands[BOT_NAME]) == 7
 
+def test_add_player_yields_bot_when_lobby_idle():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', BOT_NAME]
+    game.hands = {'Alice': [], BOT_NAME: []}
+    
+    # Alice and Bot are in. Bob joins.
+    # add_player should remove bot as lobby is idle.
+    yielded = game.add_player('Bob')
+    
+    assert yielded is True
+    assert BOT_NAME not in game.players
+    assert 'Bob' in game.players
+    assert len(game.players) == 2
+
+def test_start_game_yields_bot_when_observers_waiting(monkeypatch):
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', BOT_NAME, 'Bob']
+    # Mock deck
+    monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: [{'suit': 'Spades', 'value': '3'}] * 52)
+    
+    # start_game should remove bot because human_players >= 2
+    success = game.start_game()
+    
+    assert success is True
+    assert BOT_NAME not in game.players
+    assert len(game.players) == 2
+
 def test_draw_card_reshuffles_when_deck_is_empty():
     game = FamilyBlackjackEngine()
     game.players = ['Alice']
