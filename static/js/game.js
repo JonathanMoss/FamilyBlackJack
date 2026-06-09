@@ -74,45 +74,43 @@ function renderRearrangedHand() {
 
 function buildCardElement(card) {
     const div = document.createElement('div');
-    div.className = 'card';
+    div.className = 'card image-card';
     if(card.suit === 'Hearts' || card.suit === 'Diamonds') div.classList.add('red');
     
-    const suitSymbol = SUIT_EMOJIS[card.suit] || card.suit[0];
-    let displayVal = card.value;
-    if(displayVal === 'Ace') displayVal = 'A';
-    if(displayVal === 'Jack') displayVal = 'J';
-    if(displayVal === 'Queen') displayVal = 'Q';
-    if(displayVal === 'King') displayVal = 'K';
+    // Store metadata for reliable selection tracking via data attributes
+    div.dataset.value = card.value;
+    div.dataset.suit = card.suit;
+
+    const imgPath = `/static/images/${card.value}_of_${card.suit}.png`.toLowerCase();
 
     div.innerHTML = `
         <div class="badge"></div>
-        <div class="pip-tl">${displayVal}<br>${suitSymbol}</div>
-        <div class="suit-center">${suitSymbol}</div>
-        <div class="pip-br">${displayVal}<br>${suitSymbol}</div>
+        <img src="${imgPath}" class="card-img" alt="${card.value} of ${card.suit}">
     `;
     return div;
 }
 
 function updateBadges(container) {
     const cardsInDOM = container.getElementsByClassName('card');
+    
+    // Reset all badges
+    for(let element of cardsInDOM) {
+        const badge = element.querySelector('.badge');
+        if (badge) badge.innerText = '';
+    }
+
     selectedCards.forEach((sc, idx) => {
         for(let element of cardsInDOM) {
-            const rawText = element.querySelector('.pip-tl').innerText;
-            const shortVal = sc.value === 'Ace' ? 'A' : sc.value === 'Jack' ? 'J' : sc.value === 'Queen' ? 'Q' : sc.value === 'King' ? 'K' : sc.value;
-            
-            if(rawText.includes(shortVal) && rawText.includes(SUIT_EMOJIS[sc.suit])) {
+            // Match via dataset attributes instead of scraping text
+            if(element.dataset.value === sc.value && element.dataset.suit === sc.suit) {
                 if(element.classList.contains('selected')) {
-                    element.querySelector('.badge').innerText = idx + 1;
+                    const badge = element.querySelector('.badge');
+                    if (badge) badge.innerText = idx + 1;
                     break;
                 }
             }
         }
     });
-    for(let element of cardsInDOM) {
-        if(!element.classList.contains('selected')) {
-            element.querySelector('.badge').innerText = '';
-        }
-    }
 }
 
 function playSelected() {
@@ -226,22 +224,19 @@ socket.on('state_update', (state) => {
     // Refresh Top Discard Card View layout
     if(state.top_card) {
         const frame = document.getElementById('top-card');
-        frame.className = 'card';
+        frame.className = 'card image-card';
         if(state.top_card.suit === 'Hearts' || state.top_card.suit === 'Diamonds') frame.classList.add('red');
         
-        const suitSymbol = SUIT_EMOJIS[state.top_card.suit];
-        let val = state.top_card.value;
-        if(val === 'Ace') val = 'A';
-        if(val === 'Jack') val = 'J';
-        if(val === 'Queen') val = 'Q';
-        if(val === 'King') val = 'K';
+        const imgPath = `/static/images/${state.top_card.value}_of_${state.top_card.suit}.png`.toLowerCase();
+        frame.innerHTML = `<img src="${imgPath}" class="card-img" alt="${state.top_card.value} of ${state.top_card.suit}">`;
 
-        frame.innerHTML = `
-            <div class="pip-tl">${val}<br>${suitSymbol}</div>
-            <div class="suit-center">${suitSymbol}</div>
-            <div class="pip-br">${val}<br>${suitSymbol}</div>
-        `;
-        document.getElementById('active-suit-indicator').innerText = `Active Match Suit: ${state.active_suit}`;
+        const suitIndicator = document.getElementById('active-suit-indicator');
+        if (state.is_started) {
+            suitIndicator.style.display = 'block';
+            suitIndicator.innerText = `Active Match Suit: ${state.active_suit}`;
+        } else {
+            suitIndicator.style.display = 'none';
+        }
     }
 
     // Refresh Room Active Table Roster
@@ -376,6 +371,17 @@ function resetGame() {
     if(!confirm('Are you sure you want to reset the current match? This will clear hands but keep league stats.')) return;
     socket.emit('reset_match');
 }
+
+// Initialize the lobby with a decorative placeholder before socket/join events
+function initLobbyVisuals() {
+    const frame = document.getElementById('top-card');
+    if (frame && !frame.innerHTML.trim()) {
+        frame.className = 'card image-card';
+        const imgPath = `/static/images/ace_of_spades.png`;
+        frame.innerHTML = `<img src="${imgPath}" class="card-img" alt="Ace of Spades Placeholder">`;
+    }
+}
+initLobbyVisuals();
 
 socket.on('room_reset', (data) => {
     showToast(data.msg || 'Match reset.');

@@ -29,3 +29,11 @@ Feature: First-card startup behavior
     And the first discard card is "Jack of Hearts"
     When the game starts
     Then the game should not have an active penalty
+
+  Scenario: An 8 card as the starter card applies the miss-turn penalty to the first player
+    Given a lobby has players "Alice" and "Bob"
+    And the first discard card is "8 of Spades"
+    When the game starts
+    Then the first player "Bob" should be skipped
+    And "Alice" should be the current player
+  

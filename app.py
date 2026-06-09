@@ -138,22 +138,24 @@ class FamilyBlackjackEngine:
         self.declared_ace_suit = None
         self.penalty_source = None
 
+        # --- ROTATION LOGIC ---
+        # Update dealer and starting turn BEFORE checking for specialty starter cards
+        self.match_dealer_index = (self.match_dealer_index + 1) % len(self.players)
+        self.current_turn_index = (self.match_dealer_index + 1) % len(self.players)
+
         if starter['value'] == '2':
             self.active_penalty_type = '2'
             self.accumulated_penalty = 2
         elif starter['value'] == 'Jack' and starter['suit'] in ['Clubs', 'Spades']:
             self.active_penalty_type = 'BJ'
             self.accumulated_penalty = 5
+        elif starter['value'] == '8':
+            # If the first card is an 8, the first player is skipped.
+            # The turn moves from (dealer + 1) to (dealer + 2).
+            self.current_turn_index = (self.current_turn_index + 1) % len(self.players)
 
         self.is_started = True
 
-        # --- ROTATION LOGIC ---
-        self.match_dealer_index = (
-            (self.match_dealer_index + 1) % len(self.players)
-        )
-        self.current_turn_index = (
-            (self.match_dealer_index + 1) % len(self.players)
-        )
         return True
 
     def get_current_player_name(self):
@@ -281,6 +283,35 @@ class FamilyBlackjackEngine:
                 self.register_league_player(name)
                 self.league_losses[name] += 1
 
+    def _calculate_penalty_update(self, card, current_type, current_accumulated, player_name):
+        """Helper to determine the new penalty state after playing a card.
+
+        Returns:
+            tuple: (new_penalty_type, new_accumulated_penalty, new_penalty_source)
+        """
+        new_type = current_type
+        new_accumulated = current_accumulated
+        new_source = self.penalty_source
+
+        if card['value'] == '2':
+            new_accumulated = new_accumulated + 2 if current_type == '2' else 2
+            new_type = '2'
+            new_source = player_name
+        elif card['value'] == 'Jack' and card['suit'] in ['Spades', 'Clubs']:
+            new_accumulated = new_accumulated + 5 if current_type == 'BJ' else 5
+            new_type = 'BJ'
+            new_source = player_name
+        elif (
+            card['value'] == 'Jack' and
+            card['suit'] in ['Hearts', 'Diamonds'] and
+            current_type == 'BJ'
+        ):
+            new_type = None
+            new_accumulated = 0
+            new_source = None
+
+        return new_type, new_accumulated, new_source
+
     # pylint: disable=too-many-locals,too-many-return-statements,too-many-branches,too-many-statements
     def validate_and_play_move(self, name, selected_cards):
         """Process legal game plays against rules and active penalties.
@@ -321,6 +352,19 @@ class FamilyBlackjackEngine:
         )
         active_val = top_card['value']
 
+        # Pre-calculate intended penalty enforcement.
+        # If the turn started with a penalty, the player MUST end their chain with a valid counter.
+        last_card = matched_cards[-1]
+        last_is_bj = (last_card['value'] == 'Jack' and last_card['suit'] in ['Spades', 'Clubs'])
+        last_is_rj = (last_card['value'] == 'Jack' and last_card['suit'] in ['Hearts', 'Diamonds'])
+        last_is_two = (last_card['value'] == '2')
+
+        if self.accumulated_penalty > 0:
+            if self.active_penalty_type == '2' and not last_is_two:
+                return False, "Your last card must be a 2 to counter the penalty!", 0
+            if self.active_penalty_type == 'BJ' and not (last_is_bj or last_is_rj):
+                return False, "Your final card must be a Jack to counter the penalty!", 0
+
         temp_penalty_type = self.active_penalty_type
         temp_accumulated = self.accumulated_penalty
         first_card = matched_cards[0]
@@ -353,45 +397,17 @@ class FamilyBlackjackEngine:
 
                 is_chain_valid = is_same_rank or is_ace or is_suit_chain
                 if not is_chain_valid:
-                    return False, (
-                        "You cannot do that! "
-                        "You need a Queen before continuing with same-suit cards."
-                    ), 0
+                    return False, "Chain invalid: subsequent cards must match rank, be an Ace, or follow a Queen of the same suit.", 0
 
             if card['value'] == '8':
                 eight_skips += 1
 
-        last_card = matched_cards[-1]
-        last_is_bj = (
-            last_card['value'] == 'Jack' and
-            last_card['suit'] in ['Spades', 'Clubs']
-        )
-        last_is_rj = (
-            last_card['value'] == 'Jack' and
-            last_card['suit'] in ['Hearts', 'Diamonds']
-        )
-        last_is_two = (last_card['value'] == '2')
-
-        previous_penalty_type = temp_penalty_type
-
-        if temp_accumulated > 0:
-            if temp_penalty_type == '2' and not last_is_two:
-                return False, "Your last card must be a 2 to counter the penalty!", 0
-            if temp_penalty_type == 'BJ' and not (last_is_bj or last_is_rj):
-                return False, "Your final card must be a Jack to counter the penalty!", 0
-
-        if last_is_two:
-            temp_penalty_type = '2'
-            temp_accumulated = temp_accumulated + 2 if previous_penalty_type == '2' else 2
-            self.penalty_source = name
-        elif last_is_bj:
-            temp_penalty_type = 'BJ'
-            temp_accumulated = temp_accumulated + 5 if previous_penalty_type == 'BJ' else 5
-            self.penalty_source = name
-        elif last_is_rj and temp_penalty_type == 'BJ':
-            temp_penalty_type = None
-            temp_accumulated = 0
-            self.penalty_source = None
+            # Accumulate penalties for every card in the chain using the helper
+            (temp_penalty_type,
+             temp_accumulated,
+             self.penalty_source) = self._calculate_penalty_update(
+                 card, temp_penalty_type, temp_accumulated, name
+             )
 
         self.active_penalty_type = temp_penalty_type
         self.accumulated_penalty = temp_accumulated
@@ -411,22 +427,35 @@ class FamilyBlackjackEngine:
             suit_to_dump (str): Target card suit to purge.
 
         Returns:
-            tuple: (bool success status, str outcome message)
+        tuple: (bool success status, str outcome message, int skips)
         """
         if name != self.get_current_player_name():
-            return False, "Not your turn."
-        if self.discard_pile[-1]['value'] != 'Queen':
-            return False, "Top card is not a Queen."
+            return False, "Not your turn.", 0
+        if not self.discard_pile or self.discard_pile[-1]['value'] != 'Queen':
+            return False, "Top card is not a Queen.", 0
 
         player_hand = self.hands[name]
         cards_to_dump = [
             card for card in player_hand if card['suit'] == suit_to_dump
         ]
 
+        if not cards_to_dump:
+            return True, "No cards of that suit to dump.", 0
+
+        skips = 0
         for card in cards_to_dump:
             player_hand.remove(card)
             self.discard_pile.append(card)
-        return True, f"Dumped {len(cards_to_dump)} cards."
+
+            # Update penalty state for every card dumped
+            (self.active_penalty_type,
+             self.accumulated_penalty,
+             self.penalty_source) = self._calculate_penalty_update(
+                 card, self.active_penalty_type, self.accumulated_penalty, name
+             )
+            if card['value'] == '8':
+                skips += 1
+        return True, f"Dumped {len(cards_to_dump)} cards.", skips
 
 
 # Global instances tracking core system state mechanics
@@ -494,7 +523,10 @@ def handle_start():
             starter_sid = game.name_to_sid.get(starter_name)
             if starter_sid:
                 socketio.emit('prompt_ace_suit', {}, to=starter_sid)
-            ace_msg = f"🔮 The first card is an Ace! {starter_name} must declare the active suit."
+            ace_msg = (
+                f"🔮 The first card is an Ace! {starter_name} "
+                "must declare the active suit."
+            )
             socketio.emit(
                 'game_log',
                 {'msg': ace_msg},
@@ -514,6 +546,13 @@ def handle_start():
                 {'msg': bj_msg},
                 room='game_room'
             )
+        elif first_card['value'] == '8':
+            skipped_name = game.players[(game.match_dealer_index + 1) % len(game.players)]
+            eight_msg = (
+                f"🛑 The first card is an 8! {skipped_name} misses a turn. "
+                f"Action starts with {starter_name}!"
+            )
+            socketio.emit('game_log', {'msg': eight_msg}, room='game_room')
 
         broadcast_state()
     else:
@@ -633,7 +672,7 @@ def handle_cascade(data):
     if not name or name != game.get_current_player_name():
         return
     suit = data.get('suit')
-    success, msg = game.execute_queen_cascade(name, suit)
+    success, msg, skips = game.execute_queen_cascade(name, suit)
     if success:
         log_msg = f"👑 {name} executed a Queen Cascade on {suit}!"
         socketio.emit(
@@ -659,7 +698,13 @@ def handle_cascade(data):
                 socketio.emit(
                     'game_log', {'msg': last_card_msg}, room='game_room'
                 )
-            game.advance_turn()
+
+            turn_steps = 1 + skips
+            if skips > 0:
+                skip_msg = f"skip 🛑 {skips} player(s) skipped by cascaded 8s!"
+                socketio.emit('game_log', {'msg': skip_msg}, room='game_room')
+
+            game.advance_turn(steps=turn_steps)
         broadcast_state()
     else:
         emit('error', {'msg': msg})
@@ -770,6 +815,14 @@ def broadcast_state():
     if not active_suit and game.discard_pile:
         active_suit = game.discard_pile[-1]['suit']
 
+    # Determine the top card to display. If the lobby is idle (no game started and no pile),
+    # we show a decorative Ace of Spades placeholder.
+    if not game.discard_pile and not game.is_started:
+        top_card = {'suit': 'Spades', 'value': 'Ace'}
+        active_suit = 'Spades'
+    else:
+        top_card = game.discard_pile[-1] if game.discard_pile else None
+
     scoreboards = []
     for u_name in game.league_wins:
         scoreboards.append({
@@ -786,7 +839,7 @@ def broadcast_state():
 
     state = {
         'is_started': game.is_started,
-        'top_card': game.discard_pile[-1] if game.discard_pile else None,
+        'top_card': top_card,
         'active_suit': active_suit,
         'current_player': current_player,
         'current_player_sid': current_sid,

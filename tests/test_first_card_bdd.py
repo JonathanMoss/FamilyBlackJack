@@ -69,6 +69,10 @@ def test_black_jack_starter_applies_penalty():
 def test_red_jack_starter_no_penalty():
     pass
 
+@scenario(FEATURE_FILE, 'An 8 card as the starter card applies the miss-turn penalty to the first player')
+def test_eight_starter_skips_first_player():
+    pass
+
 
 @given('a lobby has players "Alice" and "Bob"', target_fixture='lobby_with_two_players')
 def lobby_with_two_players():
@@ -91,6 +95,11 @@ def first_card_two():
 @given('the first discard card is "Jack of Spades"', target_fixture='first_card')
 def first_card_black_jack():
     return {'suit': 'Spades', 'value': 'Jack'}
+
+
+@given('the first discard card is "8 of Spades"', target_fixture='first_card')
+def first_card_eight():
+    return {'suit': 'Spades', 'value': '8'}
 
 
 @given('the first discard card is "Jack of Hearts"', target_fixture='first_card')
@@ -162,3 +171,13 @@ def assert_penalty_type_two(start_game):
 def assert_penalty_type_bj(start_game):
     engine = start_game
     assert engine.active_penalty_type == 'BJ'
+
+@then('the first player "Bob" should be skipped')
+def assert_bob_skipped(start_game):
+    # In this context, Alice is dealer (0), Bob is first (1). 
+    # If Bob is skipped, the turn index returns to Alice (0).
+    assert start_game.current_turn_index == 0
+
+@then('"Alice" should be the current player')
+def assert_alice_current(start_game):
+    assert start_game.get_current_player_name() == 'Alice'

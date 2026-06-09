@@ -77,11 +77,10 @@ h1 { font-size: 1.8rem; margin: 10px 0; }
     background: white; 
     color: black; 
     border-radius: 8px; 
-    margin: 6px;
+    margin: 3px;
     box-sizing: border-box;
     box-shadow: 0 3px 7px rgba(0,0,0,0.4);
     cursor: pointer; 
-    border: 3px solid transparent; 
     
     /* Explicitly prefixed user-select engine properties */
     -webkit-user-select: none;  /* Mobile Safari / Chrome Webview */
@@ -92,6 +91,19 @@ h1 { font-size: 1.8rem; margin: 10px 0; }
     display: inline-grid;
     grid-template-columns: 22px 1fr 22px;
     grid-template-rows: 24px 1fr 24px;
+}
+
+.card.image-card {
+    display: inline-block;
+    background: white;
+    
+}
+
+.card-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    display: block;
 }
 
 .card .pip-tl {
@@ -200,7 +212,7 @@ button:disabled { background: #4a544c !important; color: #888 !important; cursor
 
 /* Hand Container Scrolling Tray */
 #hand-container { margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); }
-#my-hand { display: flex; overflow-x: auto; overflow-y: hidden; padding: 15px 5px; gap: 2px; justify-content: flex-start; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+#my-hand { display: flex; overflow-x: auto; overflow-y: hidden; padding: 21px 5px; gap: 2px; justify-content: flex-start; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
 #my-hand::-webkit-scrollbar { height: 6px; }
 #my-hand::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 10px;}
 #my-hand::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
@@ -428,6 +440,10 @@ button:disabled { background: #4a544c !important; color: #888 !important; cursor
     animation: pulseGlow 1.5s infinite alternate;
 }
 
+#active-suit-indicator {
+    display: none; /* Hidden by default; shown only when game is started */
+}
+
 @keyframes pulseGlow {
     0% { box-shadow: 0 4px 10px rgba(183, 28, 28, 0.3); }
     100% { box-shadow: 0 4px 18px rgba(255, 82, 82, 0.6); }
@@ -460,4 +476,3 @@ button:disabled { background: #4a544c !important; color: #888 !important; cursor
 .turn-badge.my-turn .timer-bar {
     background: #00ff66;
 }
-
