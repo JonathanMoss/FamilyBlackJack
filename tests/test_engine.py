@@ -1,6 +1,7 @@
 import os
 import sys
 import types
+import time
 
 import pytest
 
@@ -520,7 +521,7 @@ def test_bot_logic_plays_chain_of_cards():
     game.current_turn_index = 1
     
     app.game = game
-    app.run_bot_logic()
+    app.run_bot_logic(BOT_NAME)
     
     assert len(game.hands[BOT_NAME]) == 1
     assert game.hands[BOT_NAME][0]['value'] == '8'
@@ -546,9 +547,276 @@ def test_bot_logic_plays_penalty_chain():
     game.current_turn_index = 1
     
     app.game = game
-    app.run_bot_logic()
+    app.run_bot_logic(BOT_NAME)
     
     # Played two 2s
     assert len(game.hands[BOT_NAME]) == 1
     assert game.accumulated_penalty == 6
     assert game.active_penalty_type == '2'
+
+def test_play_joker_reverses_direction_and_sets_cooldown():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob', 'Charlie']
+    game.start_game()
+    game.current_turn_index = 0  # Alice
+    
+    assert game.direction == 1
+    
+    success, msg = game.play_joker('Alice')
+    assert success is True
+    assert game.direction == -1
+    assert game.joker_cooldown == 3
+    assert game.jokers_available['Alice'] is False
+
+    # Alice plays a card to advance turn
+    game.advance_turn(1)
+    assert game.joker_cooldown == 2
+    # Turn is now Charlie (since direction is -1: 0 - 1 = -1 -> index 2)
+    assert game.players[game.current_turn_index] == 'Charlie'
+
+    success, msg = game.play_joker('Charlie')
+    assert success is False
+    assert 'cooldown' in msg
+
+def test_play_joker_fails_with_two_players():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.start_game()
+    game.current_turn_index = 0
+    success, msg = game.play_joker('Alice')
+    assert success is False
+    assert '2-player' in msg
+
+def test_play_joker_fails_with_two_active_players_and_spectator():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.start_game()
+    game.current_turn_index = 0
+    game.add_player('Charlie')  # Joins mid-game as spectator (0 cards)
+    success, msg = game.play_joker('Alice')
+    assert success is False
+    assert '2-player' in msg
+
+def test_enforce_turn_timer_auto_draws_after_30_seconds():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.start_game()
+    game.current_turn_index = 0
+    game.hands = {'Alice': [{'suit': 'Spades', 'value': 'King'}], 'Bob': [{'suit': 'Spades', 'value': 'Queen'}]}
+    game.current_turn_start_time = time.time() - 31  # 31 seconds ago
+    
+    result = game.enforce_turn_timer()
+    
+    assert result is not None
+    assert result['player'] == 'Alice'
+    assert result['was_penalty'] is False
+    assert len(game.hands['Alice']) == 2
+    assert game.current_turn_index == 1
+
+def test_enforce_turn_timer_with_penalty():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.start_game()
+    game.current_turn_index = 0
+    game.hands = {'Alice': [{'suit': 'Hearts', 'value': 'Jack'}], 'Bob': [{'suit': 'Spades', 'value': 'Queen'}]}
+    game.accumulated_penalty = 5
+    game.active_penalty_type = 'BJ'
+    game.current_turn_start_time = time.time() - 31
+    
+    result = game.enforce_turn_timer()
+    
+    assert result is not None
+    assert result['was_penalty'] is True
+    assert len(game.hands['Alice']) == 7
+    assert game.accumulated_penalty == 0
+
+def test_enforce_turn_timer_draws_all_cards_in_single_call(monkeypatch):
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.start_game()
+    game.current_turn_index = 0
+    game.hands = {'Alice': [{'suit': 'Hearts', 'value': 'Jack'}], 'Bob': [{'suit': 'Spades', 'value': 'Queen'}]}
+    game.accumulated_penalty = 5
+    game.active_penalty_type = 'BJ'
+    game.current_turn_start_time = time.time() - 31
+
+    draws = []
+    original_draw = game.draw_card
+    def mock_draw(name, count, reason=None):
+        draws.append((name, count, reason))
+        return original_draw(name, count, reason)
+    monkeypatch.setattr(game, 'draw_card', mock_draw)
+    
+    game.enforce_turn_timer()
+    
+    assert len(draws) == 1
+    assert draws[0] == ('Alice', 6, 'penalty_timeout')
+
+def test_enforce_turn_timer_with_pending_ace_declaration():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.start_game()
+    game.current_turn_index = 0
+    game.hands = {'Alice': [{'suit': 'Spades', 'value': 'King'}], 'Bob': [{'suit': 'Spades', 'value': 'Queen'}]}
+    game.discard_pile = [{'suit': 'Diamonds', 'value': 'Ace'}]
+    game.declared_ace_suit = None
+    game.current_turn_start_time = time.time() - 31
+    
+    result = game.enforce_turn_timer()
+    
+    assert result is not None
+    assert game.declared_ace_suit == 'Diamonds'
+
+
+def test_bot_logic_plays_ace_and_declares_suit():
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', '🤖 Bot 1']
+    game.is_started = True
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': 'King'}],
+        '🤖 Bot 1': [
+            {'suit': 'Hearts', 'value': 'Ace'},
+            {'suit': 'Clubs', 'value': '2'},
+            {'suit': 'Clubs', 'value': '4'}
+        ]
+    }
+    game.discard_pile = [{'suit': 'Diamonds', 'value': '10'}]
+    game.current_turn_index = 1
+    
+    app.game = game
+    app.run_bot_logic('🤖 Bot 1')
+    
+    # Bot should have played the Ace
+    assert len(game.hands['🤖 Bot 1']) == 2
+    # It should have declared the most common suit in hand (Clubs)
+    assert game.declared_ace_suit == 'Clubs'
+    assert game.current_turn_index == 0
+
+
+def test_handle_add_bot_generates_unique_names(monkeypatch):
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice']
+    game.sid_to_name = {'fake_sid': 'Alice'}
+    
+    app.game = game
+    monkeypatch.setattr(app.request, 'sid', 'fake_sid')
+    
+    app.handle_add_bot()
+    assert sum(1 for p in game.players if p.startswith('🤖')) == 1
+    
+    app.handle_add_bot()
+    assert sum(1 for p in game.players if p.startswith('🤖')) == 2
+    assert len(game.players) == 3
+    
+    app.handle_add_bot()
+    assert sum(1 for p in game.players if p.startswith('🤖')) == 3
+    assert len(game.players) == 4
+
+    emitted = []
+    monkeypatch.setattr(app, 'emit', lambda event, data: emitted.append((event, data)))
+    
+    app.handle_add_bot()
+    assert len(emitted) == 1
+    assert emitted[0][0] == 'error'
+    assert 'Maximum of 3 bots allowed.' in emitted[0][1]['msg']
+    assert len(game.players) == 4
+
+
+def test_bot_logic_draws_fallback_if_play_fails(monkeypatch):
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', '🤖 Bot 1']
+    game.is_started = True
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': 'King'}],
+        '🤖 Bot 1': [{'suit': 'Spades', 'value': '5'}]
+    }
+    game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
+    game.current_turn_index = 1
+    game.deck = [{'suit': 'Hearts', 'value': '7'}]
+    
+    original_validate = game.validate_and_play_move
+    def mock_validate(*args, **kwargs):
+        return False, "Forced failure", 0
+    monkeypatch.setattr(game, 'validate_and_play_move', mock_validate)
+    
+    app.game = game
+    app.run_bot_logic('🤖 Bot 1')
+    
+    # Bot should have drawn a card and advanced turn
+    assert len(game.hands['🤖 Bot 1']) == 2
+    assert game.current_turn_index == 0
+
+
+def test_bot_logic_plays_joker_and_reverses_direction(monkeypatch):
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', '🤖 Bot 1', 'Charlie']
+    game.is_started = True
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': 'King'}],
+        '🤖 Bot 1': [{'suit': 'Spades', 'value': '5'}, {'suit': 'Hearts', 'value': '2'}],
+        'Charlie': [{'suit': 'Spades', 'value': '4'}]
+    }
+    game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
+    game.current_turn_index = 1
+    game.jokers_available = {'🤖 Bot 1': True}
+    game.joker_cooldown = 0
+    game.direction = 1
+    game.deck = [{'suit': 'Clubs', 'value': '3'}] # Ensure fallback draw has a card
+    
+    # Force random.random to return 0.1 (always play joker)
+    monkeypatch.setattr('random.random', lambda: 0.1)
+    
+    app.game = game
+    app.run_bot_logic('🤖 Bot 1')
+    
+    assert game.direction == -1
+    assert not game.jokers_available['🤖 Bot 1']
+    assert game.joker_cooldown == 2
+    assert game.current_turn_index == 0
+
+
+def test_multiple_bots_joker_cooldown_ordering(monkeypatch):
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', '🤖 Bot 1', '🤖 Bot 2']
+    game.is_started = True
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': 'King'}],
+        '🤖 Bot 1': [{'suit': 'Spades', 'value': '8'}, {'suit': 'Hearts', 'value': '2'}],
+        '🤖 Bot 2': [{'suit': 'Clubs', 'value': '7'}, {'suit': 'Clubs', 'value': '2'}]
+    }
+    game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
+    game.current_turn_index = 1
+    game.jokers_available = {p: True for p in game.players}
+    game.joker_cooldown = 0
+    game.direction = 1
+    game.deck = [{'suit': 'Clubs', 'value': '3'}, {'suit': 'Diamonds', 'value': '4'}]
+    
+    monkeypatch.setattr('random.random', lambda: 0.1)
+    
+    app.game = game
+    
+    # Turn 1: Bot 1 plays Joker (cooldown 3, dir -1). Then plays 8 (skips 1, steps=2).
+    # Current index (1) + 2*(-1) = -1 -> 2 (Bot 2)
+    # Cooldown decrements by 2 -> 1
+    app.run_bot_logic('🤖 Bot 1')
+    
+    assert game.direction == -1
+    assert game.current_turn_index == 2
+    assert game.joker_cooldown == 1
+    
+    # Turn 2: Bot 2 cannot play Joker due to cooldown=1
+    app.run_bot_logic('🤖 Bot 2')
+    
+    assert game.current_turn_index == 1
+    assert game.joker_cooldown == 0
+    assert game.jokers_available['🤖 Bot 2'] is True

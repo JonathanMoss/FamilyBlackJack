@@ -160,6 +160,56 @@ function evaluateButtonAbilities() {
         drawBtn.disabled = false;
         drawBtn.innerText = (globalState.penalty > 0) ? `Take Penalty (+${globalState.penalty})` : "Draw Card";
     }
+
+    // Dynamically inject the Joker button if it does not exist
+    let jokerBtn = document.getElementById('joker-btn');
+    if (!jokerBtn) {
+        jokerBtn = document.createElement('button');
+        jokerBtn.id = 'joker-btn';
+        jokerBtn.onclick = () => socket.emit('play_joker');
+        
+        const drawBtn = document.getElementById('action-draw-btn');
+        if (drawBtn && drawBtn.parentNode) {
+            drawBtn.parentNode.insertBefore(jokerBtn, drawBtn.nextSibling);
+        }
+    }
+    
+    // Evaluate the Joker status and cooldown states
+    const clientName = document.getElementById('username').value.trim();
+    const hasJoker = globalState.jokers_available && globalState.jokers_available[clientName];
+    const cooldown = globalState.joker_cooldown || 0;
+    
+    let activePlayerCount = 0;
+    if (globalState.is_started && globalState.hand_sizes) {
+        for (const p in globalState.hand_sizes) {
+            if (globalState.hand_sizes[p] > 0) activePlayerCount++;
+        }
+    } else {
+        activePlayerCount = globalState.player_list ? globalState.player_list.length : 0;
+    }
+    const isTwoPlayer = activePlayerCount <= 2;
+    
+    if (globalState.is_started) {
+        jokerBtn.style.display = 'inline-block';
+        if (isTwoPlayer) {
+            jokerBtn.disabled = true;
+            jokerBtn.innerText = '🃏 Disabled (2 Players)';
+        } else if (!hasJoker) {
+            jokerBtn.disabled = true;
+            jokerBtn.innerText = '🃏 Joker Used';
+        } else if (cooldown > 0) {
+            jokerBtn.disabled = true;
+            jokerBtn.innerText = `🃏 Wait (${cooldown})`;
+        } else if (!isMyTurn) {
+            jokerBtn.disabled = true;
+            jokerBtn.innerText = `🃏 Not Your Turn`;
+        } else {
+            jokerBtn.disabled = false;
+            jokerBtn.innerText = `🃏 Play Joker`;
+        }
+    } else {
+        if (jokerBtn) jokerBtn.style.display = 'none';
+    }
 }
 
 socket.on('your_hand', (data) => {
@@ -190,6 +240,14 @@ socket.on('state_update', (state) => {
         document.getElementById('lobby-controls').style.display = 'none';
     } else {
         document.getElementById('lobby-controls').style.display = 'block';
+        let addBotBtn = document.getElementById('add-bot-btn');
+        if (!addBotBtn) {
+            addBotBtn = document.createElement('button');
+            addBotBtn.id = 'add-bot-btn';
+            addBotBtn.innerText = '🤖 Add Bot';
+            addBotBtn.onclick = () => socket.emit('add_bot');
+            document.getElementById('lobby-controls').appendChild(addBotBtn);
+        }
     }
 
     // --- REFACTORED WORKFLOW: REPREMIUMIZED MATCH DASHBOARD SYSTEM ---
@@ -208,18 +266,53 @@ socket.on('state_update', (state) => {
         const myHandSize = state.hand_sizes[clientName] || 0;
         const isSpectator = myHandSize === 0;
 
+        if (state.current_player !== clientName) {
+            const aceModal = document.getElementById('ace-modal');
+            if (aceModal) aceModal.style.display = 'none';
+        }
+
+        const timerBar = document.getElementById('turn-timer');
+
         if (isSpectator) {
             turnContainer.classList.remove('my-turn');
             turnMessage.innerHTML = `👀 <span><b>Spectating:</b> Waiting for next round...</span>`;
-            document.getElementById('turn-timer').style.width = '0%';
+            if (timerBar) {
+                timerBar.style.transition = 'none';
+                timerBar.style.width = '0%';
+            }
         } else if (state.current_player === clientName) {
             turnContainer.classList.add('my-turn');
             turnMessage.innerHTML = `⚔️ <span><b>YOUR TURN!</b> Play your hand.</span>`;
-            document.getElementById('turn-timer').style.width = '100%'; 
         } else {
             turnContainer.classList.remove('my-turn');
             turnMessage.innerHTML = `👤 <span>Action on <b>${state.current_player}</b></span>`;
-            document.getElementById('turn-timer').style.width = '40%'; 
+        }
+
+        if (!isSpectator && timerBar && state.turn_start_time) {
+            const elapsed = state.server_time - state.turn_start_time;
+            const remaining = Math.max(0, 30 - elapsed);
+            const percent = (remaining / 30) * 100;
+            timerBar.style.transition = 'none';
+            timerBar.style.width = percent + '%';
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    timerBar.style.transition = `width ${remaining}s linear, background-color 0.3s`;
+                    timerBar.style.width = '0%';
+                });
+            });
+
+            // Clear any existing turn warning timeout
+            if (window.turnWarningTimeout) clearTimeout(window.turnWarningTimeout);
+            
+            // Setup the 8-second remaining wobble nudge
+            if (state.current_player === clientName && remaining > 8) {
+                window.turnWarningTimeout = setTimeout(() => {
+                    showToast(`⏰ Hurry up! 8 seconds left!`);
+                    soundEffect('alert');
+                    document.body.classList.add('wobble-effect');
+                    setTimeout(() => document.body.classList.remove('wobble-effect'), 400);
+                }, (remaining - 8) * 1000);
+            }
         }
     }
 
@@ -257,7 +350,8 @@ socket.on('state_update', (state) => {
         const suitIndicator = document.getElementById('active-suit-indicator');
         if (state.is_started) {
             suitIndicator.style.display = 'block';
-            suitIndicator.innerText = `Active Match Suit: ${state.active_suit}`;
+            const dirIcon = state.direction === 1 ? '↻ Clockwise' : '↺ Counter-Clockwise';
+            suitIndicator.innerHTML = `Active Match Suit: <b>${state.active_suit}</b> | <span style="color:#e0a800;">Direction: ${dirIcon}</span>`;
         } else {
             suitIndicator.style.display = 'none';
         }
@@ -288,7 +382,7 @@ socket.on('state_update', (state) => {
 
         if (isPenalized) row.classList.add('penalty-target');
 
-        const avatar = (state.avatars && state.avatars[p]) ? state.avatars[p] : (p === '🤖 Computer' ? '🤖' : '👤');
+        const avatar = (state.avatars && state.avatars[p]) ? state.avatars[p] : (p.startsWith('🤖') ? '🤖' : '👤');
         const isMe = p === clientName;
         const avatarCursor = isMe ? 'style="cursor:pointer;" title="Click to change avatar" onclick="showAvatarModal()"' : '';
         const avatarHtml = `<span class="player-avatar" ${avatarCursor}>${avatar}</span>`;
@@ -398,6 +492,13 @@ createAvatarModal();
 
 socket.on('prompt_ace_suit', () => {
     document.getElementById('ace-modal').style.display = 'flex';
+});
+
+socket.on('joker_played', (data) => {
+    showToast(data.msg);
+    soundEffect('alert');
+    document.body.classList.add('joker-flash');
+    setTimeout(() => document.body.classList.remove('joker-flash'), 1000);
 });
 
 socket.on('game_log', (data) => {

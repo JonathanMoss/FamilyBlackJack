@@ -50,6 +50,8 @@ class FamilyBlackjackEngine:
         self.match_stats = {}
         self.current_turn_start_time = 0.0
         self.avatars = {}
+        self.jokers_available = {}
+        self.joker_cooldown = 0
 
     def reset_lobby(self):
         """Reset the match room engine back to baseline factory defaults."""
@@ -70,6 +72,8 @@ class FamilyBlackjackEngine:
         self.match_stats = {}
         self.current_turn_start_time = 0.0
         self.avatars = {}
+        self.jokers_available = {}
+        self.joker_cooldown = 0
         # Note: We intentionally DO NOT clear league_wins or league_losses
         # so career family stats persist across separate game room lobbies!
 
@@ -92,6 +96,8 @@ class FamilyBlackjackEngine:
         self.penalty_source = None
         self.match_stats = {}
         self.current_turn_start_time = 0.0
+        self.jokers_available = {}
+        self.joker_cooldown = 0
 
     def build_deck(self):  # pylint: disable=no-self-use
         """Construct a fresh 52-card deck array and shuffle it.
@@ -128,11 +134,11 @@ class FamilyBlackjackEngine:
             self.players.append(name)
             self.hands[name] = []
             if name not in self.avatars:
-                self.avatars[name] = '🤖' if name == BOT_NAME else '👤'
+                self.avatars[name] = '🤖' if name.startswith('🤖') else '👤'
 
             # If the lobby is idle and we now have multiple humans, remove the bot
             if not self.is_started:
-                human_players = [p for p in self.players if p != BOT_NAME]
+                human_players = [p for p in self.players if not p.startswith('🤖')]
                 if len(human_players) >= 2 and BOT_NAME in self.players:
                     self.players.remove(BOT_NAME)
                     return True
@@ -145,7 +151,7 @@ class FamilyBlackjackEngine:
             bool: True if game initialization succeeds, False otherwise.
         """
         # Clean up computer player if we have enough human players
-        human_players = [p for p in self.players if p != BOT_NAME]
+        human_players = [p for p in self.players if not p.startswith('🤖')]
         if len(human_players) >= 2 and BOT_NAME in self.players:
             self.players.remove(BOT_NAME)
             socketio.emit('game_log', {'msg': f"{BOT_NAME} has left the table to make room for humans."}, room='game_room')
@@ -189,6 +195,8 @@ class FamilyBlackjackEngine:
             } for p in self.players
         }
         self.current_turn_start_time = time.time()
+        self.jokers_available = {p: True for p in self.players}
+        self.joker_cooldown = 0
 
         # --- ROTATION LOGIC ---
         # Update dealer and starting turn BEFORE checking for specialty starter cards
@@ -227,6 +235,9 @@ class FamilyBlackjackEngine:
         attempts = 0
         while (not self.hands.get(self.players[self.current_turn_index]) and
                attempts < len(self.players)):
+            # In BDD tests, if all active players hit 0 cards, prevent an infinite skip loop
+            if attempts >= len(self.players):
+                break
             self.current_turn_index = (self.current_turn_index + self.direction) % len(self.players)
             attempts += 1
 
@@ -244,6 +255,8 @@ class FamilyBlackjackEngine:
         for _ in range(steps):
             self.current_turn_index = (self.current_turn_index + self.direction) % len(self.players)
             self._skip_spectators()
+            if getattr(self, 'joker_cooldown', 0) > 0:
+                self.joker_cooldown -= 1
 
         self.current_turn_start_time = time.time()
         self.check_and_enforce_autodraw()
@@ -538,6 +551,53 @@ class FamilyBlackjackEngine:
 
         return awards
 
+    def play_joker(self, name):
+        """Play a Joker card to reverse direction."""
+        if not self.is_started:
+            return False, "Game not started."
+        active_players = sum(1 for p in self.players if len(self.hands.get(p, [])) > 0)
+        if active_players <= 2:
+            return False, "Joker cannot be used in a 2-player game."
+        if name != self.get_current_player_name():
+            return False, "Not your turn."
+        if not getattr(self, 'jokers_available', {}).get(name, False):
+            return False, "You have already used your Joker."
+        if getattr(self, 'joker_cooldown', 0) > 0:
+            return False, f"Joker is on cooldown for {self.joker_cooldown} more turns."
+
+        self.jokers_available[name] = False
+        self.direction *= -1
+        self.joker_cooldown = len(self.players)
+        return True, "Joker played! Direction reversed."
+
+    def enforce_turn_timer(self):
+        """Check if the current turn has exceeded 30 seconds and enforce auto-draw if so."""
+        if not self.is_started:
+            return None
+        current_player = self.get_current_player_name()
+        if not current_player or current_player.startswith('🤖'):
+            return None
+
+        elapsed = time.time() - self.current_turn_start_time
+        if elapsed >= 30.0:
+            was_penalty = False
+            penalty_amount = 1
+            if self.accumulated_penalty > 0:
+                penalty_amount = self.accumulated_penalty + 1
+                self.draw_card(current_player, penalty_amount, reason='penalty_timeout')
+                self.accumulated_penalty = 0
+                self.active_penalty_type = None
+                self.penalty_source = None
+                was_penalty = True
+            else:
+                self.draw_card(current_player, 1, reason='timeout_draw')
+                
+            if self.discard_pile and self.discard_pile[-1]['value'] == 'Ace' and not self.declared_ace_suit:
+                self.declared_ace_suit = self.discard_pile[-1]['suit']
+
+            self.advance_turn()
+            return {'player': current_player, 'was_penalty': was_penalty, 'amount': penalty_amount}
+        return None
 
 # Global instances tracking core system state mechanics
 game = FamilyBlackjackEngine()
@@ -587,42 +647,78 @@ def handle_join(data):
     return None
 
 
+timer_task_started = False
+
+def turn_timer_loop():
+    """Background task to enforce the 30-second turn limit."""
+    while True:
+        socketio.sleep(1)
+        if game.is_started:
+            result = game.enforce_turn_timer()
+            if result:
+                player_name = result['player']
+                if result['was_penalty']:
+                    log_msg = f"⏰ Time's up! {player_name} auto-drew {result['amount']} cards (Penalty)."
+                else:
+                    log_msg = f"⏰ Time's up! {player_name} auto-drew 1 card."
+                socketio.emit('game_log', {'msg': log_msg}, room='game_room')
+                
+                target_sid = game.name_to_sid.get(player_name)
+                if target_sid:
+                    socketio.emit('play_sound', {'type': 'alert'}, to=target_sid)
+                    
+                broadcast_state()
+                check_for_bot_turn()
+
+@socketio.on('connect')
+def handle_connect():
+    """Start the global turn timer loop when the first user connects."""
+    global timer_task_started
+    if not timer_task_started:
+        socketio.start_background_task(turn_timer_loop)
+        timer_task_started = True
+
 def check_for_bot_turn():
     """Determine if the current turn belongs to the computer and trigger AI logic."""
     if not game.is_started:
         return
     current_player = game.get_current_player_name()
-    if current_player == BOT_NAME:
-        socketio.start_background_task(run_bot_logic)
+    if current_player and current_player.startswith('🤖'):
+        socketio.start_background_task(run_bot_logic, current_player)
 
 
-def run_bot_logic():
+def run_bot_logic(expected_bot_name):
     """Background task simulating computer thinking and decision making."""
     socketio.sleep(1.5)  # Artificial delay for natural feel
 
-    if not game.is_started or game.get_current_player_name() != BOT_NAME:
+    if not game.is_started:
+        return
+    bot_name = game.get_current_player_name()
+    if not bot_name or bot_name != expected_bot_name:
         return
 
-    # 1. Handle Ace Suit Declaration if the bot just played an Ace but hasn't declared
-    top_card = game.discard_pile[-1]
-    if top_card['value'] == 'Ace' and not game.declared_ace_suit:
-        hand = game.hands.get(BOT_NAME, [])
-        if not hand:
-            chosen_suit = "Spades"
-        else:
-            suits = [c['suit'] for c in hand]
-            chosen_suit = max(set(suits), key=suits.count)
-        
-        game.declared_ace_suit = chosen_suit
-        socketio.emit('game_log', {'msg': f"🔮 {BOT_NAME} set the active game suit to: {chosen_suit}!"}, room='game_room')
-        game.advance_turn()
-        broadcast_state()
-        check_for_bot_turn()
-        return
+    # 0. Joker Logic (30% chance to play if available and not on cooldown)
+    active_players_count = sum(1 for p in game.players if len(game.hands.get(p, [])) > 0)
+    if active_players_count > 2 and \
+            getattr(game, 'jokers_available', {}).get(bot_name, False) and \
+            getattr(game, 'joker_cooldown', 0) == 0:
+        if random.random() < 0.3:
+            success, msg = game.play_joker(bot_name)
+            if success:
+                log_msg = f"🃏🔄 {bot_name} played their Joker! Play direction is reversed!"
+                socketio.emit('game_log', {'msg': log_msg}, room='game_room')
+                socketio.emit(
+                    'joker_played', {'player': bot_name, 'msg': log_msg}, room='game_room'
+                )
+                socketio.emit('play_sound', {'type': 'alert'}, room='game_room')
+                broadcast_state()
+                # Must sleep slightly to allow UI to react before the bot plays a card
+                socketio.sleep(1.0)
 
     # 2. Decide on a move
-    hand = game.hands.get(BOT_NAME, [])
+    hand = game.hands.get(bot_name, [])
     possible_play = None
+    top_card = game.discard_pile[-1]
     
     # Check for penalty counters specifically
     if game.accumulated_penalty > 0:
@@ -650,43 +746,90 @@ def run_bot_logic():
             possible_play = best_chain
 
     if possible_play:
-        success, msg, skips = game.validate_and_play_move(BOT_NAME, possible_play)
+        success, msg, skips = game.validate_and_play_move(bot_name, possible_play)
         if success:
             cards_desc = ", ".join([f"{c['value']} of {c['suit']}" for c in possible_play])
-            socketio.emit('game_log', {'msg': f"📝 {BOT_NAME} played a chain: {cards_desc}"}, room='game_room')
+            socketio.emit('game_log', {'msg': f"📝 {bot_name} played a chain: {cards_desc}"}, room='game_room')
 
-            if len(game.hands.get(BOT_NAME, [])) == 0:
-                if BOT_NAME in getattr(game, 'match_stats', {}):
+            if len(game.hands.get(bot_name, [])) == 0:
+                if bot_name in getattr(game, 'match_stats', {}):
                     elapsed = time.time() - game.current_turn_start_time
-                    game.match_stats[BOT_NAME]['turn_time_total'] += elapsed
-                    game.match_stats[BOT_NAME]['turn_count'] += 1
+                    game.match_stats[bot_name]['turn_time_total'] += elapsed
+                    game.match_stats[bot_name]['turn_count'] += 1
 
-                game.update_league_results(BOT_NAME)
+                game.update_league_results(bot_name)
                 game.is_started = False
 
                 awards = game.calculate_awards()
-                socketio.emit('game_over', {'winner': BOT_NAME, 'awards': awards}, room='game_room')
+                socketio.emit('game_over', {'winner': bot_name, 'awards': awards}, room='game_room')
                 broadcast_state()
                 return
 
-            if len(game.hands.get(BOT_NAME, [])) == 1:
-                socketio.emit('game_log', {'msg': f"📢 🔥 LAST CARD! {BOT_NAME} is down to their final card!"}, room='game_room')
+            if len(game.hands.get(bot_name, [])) == 1:
+                socketio.emit('game_log', {'msg': f"📢 🔥 LAST CARD! {bot_name} is down to their final card!"}, room='game_room')
+
+            if possible_play[-1]['value'] == 'Ace':
+                new_hand = game.hands.get(bot_name, [])
+                if not new_hand:
+                    chosen_suit = "Spades"
+                else:
+                    suits = [c['suit'] for c in new_hand]
+                    chosen_suit = max(set(suits), key=suits.count)
+                
+                game.declared_ace_suit = chosen_suit
+                socketio.emit('game_log', {'msg': f"🔮 {bot_name} set the active game suit to: {chosen_suit}!"}, room='game_room')
 
             game.advance_turn(steps=1 + skips)
+        else:
+            if game.get_current_player_name() == bot_name:
+                game.draw_card(bot_name, 1, reason='draw_fallback')
+                game.advance_turn()
     else:
         # Must draw
-        if game.accumulated_penalty > 0:
-            socketio.emit('game_log', {'msg': f"🏳️ {BOT_NAME} accepted the penalty and drew {game.accumulated_penalty} cards."}, room='game_room')
-            game.draw_card(BOT_NAME, game.accumulated_penalty, reason='penalty_manual')
-            game.accumulated_penalty = 0
-            game.active_penalty_type = None
-        else:
-            socketio.emit('game_log', {'msg': f"🎴 {BOT_NAME} drew a card."}, room='game_room')
-            game.draw_card(BOT_NAME, 1, reason='draw')
-        game.advance_turn()
+        if game.get_current_player_name() == bot_name:
+            if game.accumulated_penalty > 0:
+                socketio.emit('game_log', {'msg': f"🏳️ {bot_name} accepted the penalty and drew {game.accumulated_penalty} cards."}, room='game_room')
+                game.draw_card(bot_name, game.accumulated_penalty, reason='penalty_manual')
+                game.accumulated_penalty = 0
+                game.active_penalty_type = None
+            else:
+                socketio.emit('game_log', {'msg': f"🎴 {bot_name} drew a card."}, room='game_room')
+                game.draw_card(bot_name, 1, reason='draw')
+            game.advance_turn()
 
     broadcast_state()
     check_for_bot_turn()
+
+
+@socketio.on('add_bot')
+def handle_add_bot():
+    """Add an extra bot to the lobby."""
+    sid = request.sid
+    requester = game.sid_to_name.get(sid)
+    if not requester:
+        return emit('error', {'msg': 'You must be in the lobby to add a bot.'})
+    
+    current_bots = sum(1 for p in game.players if p.startswith('🤖'))
+    if current_bots >= 3:
+        return emit('error', {'msg': 'Maximum of 3 bots allowed.'})
+    
+    possible_names = [
+        "🤖 HAL 9000", "🤖 The Architect", "🤖 KITT", "🤖 V'ger", 
+        "🤖 Ash", "🤖 R2-D2", "🤖 C3-PO"
+    ]
+    available_names = [n for n in possible_names if n not in game.players]
+    if not available_names:
+        return emit('error', {'msg': 'No more bot names available.'})
+        
+    bot_name = random.choice(available_names)
+    
+    game.add_player(bot_name)
+    socketio.emit(
+        'game_log',
+        {'msg': f"🤖 {requester} added {bot_name} to the lobby."},
+        room='game_room'
+    )
+    broadcast_state()
 
 
 @socketio.on('start_match')
@@ -855,6 +998,28 @@ def handle_ace_suit(data):
     game.advance_turn()
     broadcast_state()
     check_for_bot_turn()
+
+
+@socketio.on('play_joker')
+def handle_play_joker():
+    """Handle a user playing their Joker card to reverse direction."""
+    sid = request.sid
+    name = game.sid_to_name.get(sid)
+    if not name:
+        emit('error', {'msg': "Not authenticated."})
+        return
+
+    success, msg = game.play_joker(name)
+    if success:
+        log_msg = f"🃏🔄 {name} played their Joker! Play direction is reversed!"
+        socketio.emit('game_log', {'msg': log_msg}, room='game_room')
+        socketio.emit(
+            'joker_played', {'player': name, 'msg': log_msg}, room='game_room'
+        )
+        socketio.emit('play_sound', {'type': 'alert'}, room='game_room')
+        broadcast_state()
+    else:
+        emit('error', {'msg': msg})
 
 
 @socketio.on('reset_match')
@@ -1032,10 +1197,15 @@ def broadcast_state():
         'penalty_type': game.active_penalty_type,
         'player_list': game.players,
         'avatars': getattr(game, 'avatars', {}),
+        'jokers_available': getattr(game, 'jokers_available', {}),
+        'joker_cooldown': getattr(game, 'joker_cooldown', 0),
+        'direction': game.direction,
         'hand_sizes': {
             p: len(game.hands[p]) for p in game.players if p in game.hands
         },
-        'league_table': scoreboards
+        'league_table': scoreboards,
+        'turn_start_time': game.current_turn_start_time,
+        'server_time': time.time()
     }
     socketio.emit('state_update', state, room='game_room')
 

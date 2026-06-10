@@ -78,6 +78,21 @@ Feature: Advanced Gameplay Mechanics
     And "Bob" should receive the most nudges award
     And "Alice" should receive the power player award
 
+  Scenario: Playing a Joker reverses direction and applies a cooldown
+    Given a game is in progress with Alice, Bob, and Charlie
+    And the top card is "4 of Hearts"
+    And Alice has "5 of Hearts" and "King of Spades" in hand
+    And it is "Alice"'s turn
+    When Alice plays her Joker
+    Then the play direction should be reversed
+    And the Joker cooldown should be 3
+    And "Alice" should not have a Joker available
+    When Alice plays the chain: "5 of Hearts"
+    Then the Joker cooldown should be 2
+    And "Charlie" should be the current player
+    When Charlie attempts to play his Joker
+    Then the play should be rejected with message "Joker is on cooldown"
+
   Scenario: Computer player plays a chain of cards of the same rank
     Given a game is in progress with Alice and 🤖 Computer
     And the top card is "10 of Hearts"
@@ -96,3 +111,42 @@ Feature: Advanced Gameplay Mechanics
     When the computer takes its turn
     Then "🤖 Computer" should have 1 cards left
     And the accumulated penalty should be 6
+
+  Scenario: Turn timer expires and forces an auto-draw
+    Given a game is in progress with Alice and Bob
+    And it is "Alice"'s turn
+    When 30 seconds pass
+    Then Alice should automatically draw 1 cards
+    And the turn should return to Bob
+
+  Scenario: Turn timer expires while a penalty is active
+    Given a game is in progress with Alice and Bob
+    And Alice just played a "2 of Hearts"
+    And it is "Bob"'s turn
+    When 30 seconds pass
+    Then Bob should automatically draw 3 cards
+    And the turn should return to Alice
+
+  Scenario: Turn timer expires while a Black Jack penalty is active and player holds a Red Jack
+    Given a game is in progress with Alice and Bob
+    And Alice just played a "Jack of Spades"
+    And Bob has "Jack of Hearts" in hand
+    And it is "Bob"'s turn
+    When 30 seconds pass
+    Then Bob should automatically draw 6 cards
+    And the turn should return to Alice
+
+  Scenario: Playing a Joker is not allowed in a 2-player game
+    Given a game is in progress with Alice and Bob
+    And it is "Alice"'s turn
+    When Alice attempts to play her Joker
+    Then the play should be rejected with message "Joker cannot be used in a 2-player game"
+
+  Scenario: Turn timer expires while waiting for Ace suit declaration
+    Given a game is in progress with Alice and Bob
+    And the top card is "Ace of Diamonds"
+    And it is "Alice"'s turn
+    When 30 seconds pass
+    Then Alice should automatically draw 1 cards
+    And the declared suit should default to "Diamonds"
+    And the turn should return to Bob

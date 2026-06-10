@@ -262,6 +262,27 @@ button {
 button:hover:not(:disabled) { background: #ffc107; }
 button:disabled { background: #4a544c !important; color: #888 !important; cursor: not-allowed; opacity: 0.6; box-shadow: none; }
 
+/* Joker Customization */
+#joker-btn {
+    background: #9c27b0;
+    color: white;
+}
+#joker-btn:hover:not(:disabled) {
+    background: #ba68c8;
+}
+#joker-btn:disabled {
+    background: #4a544c !important;
+}
+
+.joker-flash {
+    animation: jokerScreen 1s ease-in-out 1;
+}
+@keyframes jokerScreen {
+    0% { box-shadow: none; }
+    20% { box-shadow: inset 0 0 80px rgba(156, 39, 176, 0.6); }
+    100% { box-shadow: none; }
+}
+
 #setup-panel input { padding: 10px; font-size: 16px; border-radius: 6px; border: none; width: 70%; max-width: 250px; margin-bottom: 8px; }
 
 /* Hand Container Scrolling Tray */
