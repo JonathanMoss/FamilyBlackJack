@@ -367,6 +367,12 @@ window.resetGame = resetGame;
 window.closeGameOverModal = closeGameOverModal;
 window.joinGame = joinGame;
 window.startGame = startGame;
+window.logout = logout;
+
+function logout() {
+    localStorage.removeItem('blackjack_player_name');
+    window.location.href = '/logout';
+}
 
 socket.on('receive_nudge', (data) => {
     showToast(`⏰ NUDGE from ${data.sender}! Speed up!`);
