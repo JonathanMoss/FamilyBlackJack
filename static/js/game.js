@@ -174,10 +174,14 @@ socket.on('state_update', (state) => {
     const clientName = document.getElementById('username').value.trim();
     
     // Auto-Lobby Setup Safety Valving
-    if (state.player_list.length === 0) {
-        document.getElementById('setup-panel').style.display = 'block';
-    } else if (state.player_list.includes(clientName)) {
+    if (state.player_list.includes(clientName)) {
         document.getElementById('setup-panel').style.display = 'none';
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) logoutBtn.style.display = 'inline-block';
+    } else {
+        document.getElementById('setup-panel').style.display = 'block';
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) logoutBtn.style.display = 'none';
     }
 
     if (state.is_started) {

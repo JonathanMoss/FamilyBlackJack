@@ -508,6 +508,13 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/logout')
+def logout():
+    """Clear session cookie and redirect to index."""
+    session.clear()
+    return redirect(url_for('index'))
+
+
 @socketio.on('join_game')
 def handle_join(data):
     """Handle connection routing for entry registration tasks."""
