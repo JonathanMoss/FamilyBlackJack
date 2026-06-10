@@ -6,7 +6,7 @@ and career stats persistence.
 
 import random
 # pylint: disable=import-error
-from flask import Flask, render_template, request, session
+from flask import Flask, render_template, request, session, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room
 
 app = Flask(__name__)
