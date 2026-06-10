@@ -4,6 +4,14 @@ let selectedCards = [];
 let globalState = {};
 let lastPenalized = { name: null, amount: 0 };
 
+// Web Audio API context for synthesized game sounds
+let audioCtx = null;
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
 // Custom sorting rules to respect your layout sequence: 2-10, Ace, Queen, King, Jack
 const RANK_HIERARCHY = {
     '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
@@ -18,11 +26,13 @@ function joinGame() {
         showToast("Please enter a username!");
         return;
     }
+    initAudio();
     localStorage.setItem('blackjack_player_name', name);
     socket.emit('join_game', { name: name });
 }
 
 function startGame() {
+    initAudio();
     socket.emit('start_match');
 }
 
@@ -35,7 +45,7 @@ function organizeHand(mode) {
             const j = Math.floor(Math.random() * (i + 1));
             [currentHand[i], currentHand[j]] = [currentHand[j], currentHand[i]];
         }
-        soundEffect('draw');
+        soundEffect('shuffle');
     } 
     else if (mode === 'sort') {
         currentHand.sort((a, b) => {
@@ -284,6 +294,7 @@ socket.on('state_update', (state) => {
         if (isPenalized && p === clientName) {
             if (lastPenalized.name !== clientName || lastPenalized.amount !== state.penalty) {
                 showToast(`⚠️ You have a penalty of +${state.penalty}!`);
+                soundEffect('alert');
                 document.body.classList.add('penalty-flash');
                 setTimeout(() => document.body.classList.remove('penalty-flash'), 1000);
                 lastPenalized.name = clientName;
@@ -332,6 +343,7 @@ socket.on('game_log', (data) => {
 });
 
 socket.on('game_over', (data) => {
+    soundEffect('winner');
     document.getElementById('game-over-text').innerText = `Winner: ${data.winner}!`;
     document.getElementById('game-over-modal').style.display = 'flex';
 });
@@ -354,6 +366,7 @@ window.startGame = startGame;
 
 socket.on('receive_nudge', (data) => {
     showToast(`⏰ NUDGE from ${data.sender}! Speed up!`);
+    soundEffect('alert');
     document.body.classList.add('wobble-effect');
     setTimeout(() => document.body.classList.remove('wobble-effect'), 400);
 });
@@ -369,8 +382,85 @@ function showToast(message) {
     setTimeout(() => toast.classList.remove('show'), 3500);
 }
 
-function soundEffect(type) {
-    console.log(`Tactile Operational Execution: ${type}`);
+async function soundEffect(type) {
+    // Ensure audioCtx is initialized and resumed
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') {
+        try {
+            await audioCtx.resume();
+        } catch (e) {
+            return; // Context could not be resumed, likely due to autoplay policy
+        }
+    }
+
+    const playTone = (freq, type = 'sine', duration = 0.1, volume = 0.1) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        const now = audioCtx.currentTime;
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(volume, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        
+        osc.start(now);
+        osc.stop(now + duration);
+    };
+
+    // Helper for draw sound to avoid code duplication
+    const _createAndPlayDrawSound = () => {
+        // This function is only called if audioCtx is running or successfully resumed
+        // so no need for additional audioCtx.resume() checks here.
+        const drawNow = audioCtx.currentTime;
+        const drawOsc = audioCtx.createOscillator();
+        const drawGain = audioCtx.createGain();
+        drawOsc.connect(drawGain);
+        drawGain.connect(audioCtx.destination);
+        drawOsc.frequency.setValueAtTime(400, drawNow);
+        drawOsc.frequency.exponentialRampToValueAtTime(600, drawNow + 0.1);
+        drawGain.gain.setValueAtTime(0.05, drawNow);
+        drawGain.gain.linearRampToValueAtTime(0, drawNow + 0.1);
+        drawOsc.start(drawNow);
+        drawOsc.stop(drawNow + 0.1); // Corrected 'now' to 'drawNow'
+    };
+
+    switch(type) {
+        case 'play':
+            // Low "thump" for playing a card
+            playTone(180, 'sine', 0.15, 0.2);
+            break;
+        case 'draw':
+            // Rising blip for drawing
+            _createAndPlayDrawSound();
+            break;
+        case 'shuffle':
+            // Rapid sequence of short "clicks"
+            for(let i=0; i<6; i++) {
+                setTimeout(() => playTone(Math.random() * 200 + 200, 'square', 0.05, 0.02), i * 60);
+            }
+            break;
+        case 'alert':
+            // High pitched double-beep
+            playTone(880, 'triangle', 0.1, 0.1);
+            setTimeout(() => playTone(880, 'triangle', 0.1, 0.1), 150);
+            break;
+        case 'winner':
+            // Simple C-Major Arpeggio (C4, E4, G4, C5)
+            [261.63, 329.63, 392.00, 523.25].forEach((f, i) => {
+                setTimeout(() => playTone(f, 'sine', 0.4, 0.1), i * 150);
+            });
+            break;
+        case 'penalty': // Map 'penalty' from server to 'alert' sound
+            await soundEffect('alert');
+            break;
+        case 'victory': // Map 'victory' from server to 'winner' sound
+            await soundEffect('winner');
+            break;
+        default:
+            console.log(`Sound type ${type} not recognized.`);
+    }
 }
 
 function resetGame() {
@@ -423,6 +513,7 @@ socket.on('received_cards', (data) => {
         ? (source ? `You received ${count} penalty card(s) from ${source}.` : `You received ${count} penalty card(s).`)
         : `You received ${count} card(s).`;
 
+    soundEffect('draw');
     showToast(msg);
     const logBox = document.getElementById('game-log-box');
     logBox.innerHTML += `<div>📥 ${msg}</div>`;
@@ -484,3 +575,10 @@ function animateReceivedCards(count, cards, isPenalty) {
         }, 900 + i * 70);
     }
 }
+
+// Listen for server-sent sound events
+socket.on('play_sound', (data) => {
+    if (data && data.type) {
+        soundEffect(data.type);
+    }
+});
