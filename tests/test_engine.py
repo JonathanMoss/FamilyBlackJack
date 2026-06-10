@@ -27,6 +27,8 @@ if 'flask' not in sys.modules:
     flask_stub.render_template = lambda *args, **kwargs: ''
     flask_stub.request = types.SimpleNamespace(sid=None)
     flask_stub.session = {}
+    flask_stub.redirect = lambda *args, **kwargs: ''
+    flask_stub.url_for = lambda *args, **kwargs: ''
     sys.modules['flask'] = flask_stub
 
 if 'flask_socketio' not in sys.modules:
@@ -44,6 +46,12 @@ if 'flask_socketio' not in sys.modules:
             def decorator(fn):
                 return fn
             return decorator
+
+        def start_background_task(self, task, *args, **kwargs):
+            pass
+
+        def sleep(self, seconds):
+            pass
 
     socketio_stub = types.ModuleType('flask_socketio')
     socketio_stub.SocketIO = SocketIOStub
@@ -222,28 +230,6 @@ def test_validate_and_play_move_accumulates_penalty_for_two_and_black_jack(monke
     assert game.accumulated_penalty == 5
 
 
-def test_execute_queen_cascade_discard_same_suit_cards():
-    game = FamilyBlackjackEngine()
-    game.players = ['Alice']
-    game.hands = {
-        'Alice': [
-            {'suit': 'Hearts', 'value': '2'},
-            {'suit': 'Hearts', 'value': '3'},
-            {'suit': 'Spades', 'value': '4'},
-        ]
-    }
-    game.discard_pile = [{'suit': 'Diamonds', 'value': 'Queen'}]
-    game.current_turn_index = 0
-
-    # With a Queen on top of the discard, the current player can dump cards of a chosen suit.
-    success, msg, skips = game.execute_queen_cascade('Alice', 'Hearts')
-
-    assert success is True
-    assert 'Dumped' in msg
-    # All Hearts cards should have been moved from hand to discard pile.
-    assert all(card['suit'] != 'Hearts' for card in game.hands['Alice'])
-    assert any(card['suit'] == 'Hearts' for card in game.discard_pile)
-
 def test_check_and_enforce_autodraw_forces_draw_when_no_counter():
     game = FamilyBlackjackEngine()
     game.players = ['Alice', 'Bob']
@@ -312,27 +298,6 @@ def test_validate_and_play_move_accumulates_multiple_penalties_in_chain():
     assert game.accumulated_penalty == 4
     assert game.active_penalty_type == '2'
 
-def test_queen_cascade_accumulates_penalties_and_skips():
-    game = FamilyBlackjackEngine()
-    game.players = ['Alice', 'Bob', 'Charlie']
-    game.is_started = True
-    game.name_to_sid = {'Alice': 's1', 'Bob': 's2', 'Charlie': 's3'}
-    game.discard_pile = [{'suit': 'Hearts', 'value': 'Queen'}]
-    game.hands = {
-        'Alice': [
-            {'suit': 'Hearts', 'value': '2'},
-            {'suit': 'Hearts', 'value': '8'}
-        ]
-    }
-    game.current_turn_index = 0
-    
-    success, msg, skips = game.execute_queen_cascade('Alice', 'Hearts')
-    
-    assert success is True
-    assert skips == 1
-    assert game.accumulated_penalty == 2
-    assert game.active_penalty_type == '2'
-
 def test_validate_and_play_move_queen_chain_with_rank_match_at_end():
     game = FamilyBlackjackEngine()
     game.players = ['Alice', 'Bob']
@@ -386,6 +351,45 @@ def test_validate_and_play_move_queen_suit_chain_with_user_example():
         {'suit': 'Hearts', 'value': '4'},
         {'suit': 'Spades', 'value': '4'}
     ]
+
+def test_validate_and_play_move_chain_on_existing_table_queen():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.discard_pile = [{'suit': 'Diamonds', 'value': 'Queen'}]
+    game.hands = {'Alice': [
+        {'suit': 'Diamonds', 'value': '5'},
+        {'suit': 'Diamonds', 'value': '8'},
+        {'suit': 'Diamonds', 'value': 'Jack'}
+    ]}
+    game.current_turn_index = 0
+
+    # Verifies that manual chain dumping works when the Queen was the last card played to the table
+    success, msg, skips = game.validate_and_play_move('Alice', [
+        {'suit': 'Diamonds', 'value': '5'},
+        {'suit': 'Diamonds', 'value': '8'},
+        {'suit': 'Diamonds', 'value': 'Jack'}
+    ])
+
+    assert success is True
+    assert len(game.hands['Alice']) == 0
+
+def test_validate_and_play_move_rejects_invalid_chain():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.discard_pile = [{'suit': 'Hearts', 'value': '10'}]
+    game.hands = {'Alice': [
+        {'suit': 'Hearts', 'value': '6'},
+        {'suit': 'Spades', 'value': '9'}  # Invalid match to Hearts 6
+    ]}
+    game.current_turn_index = 0
+    
+    success, msg, skips = game.validate_and_play_move('Alice', [
+        {'suit': 'Hearts', 'value': '6'},
+        {'suit': 'Spades', 'value': '9'}
+    ])
+    
+    assert success is False
+    assert 'Chain invalid' in msg
 
 def test_start_game_adds_bot_for_solo_player(monkeypatch):
     game = FamilyBlackjackEngine()
@@ -478,3 +482,73 @@ def test_reset_match_preserves_roster_but_clears_state():
     assert game.players == ['Alice', 'Bob'] # Preserved
     assert game.is_started is False         # Cleared
     assert game.accumulated_penalty == 0    # Cleared
+
+def test_calculate_awards_logic():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.start_game()
+    
+    # Override stats manually to verify the exact logic
+    game.match_stats = {
+        'Alice': {'cards_played': 12, 'turn_time_total': 30.0, 'turn_count': 10, 'nudges_sent': 1, 'penalties_received': 4, 'power_cards_played': 5},
+        'Bob': {'cards_played': 5, 'turn_time_total': 10.0, 'turn_count': 10, 'nudges_sent': 6, 'penalties_received': 0, 'power_cards_played': 2}
+    }
+    
+    awards = game.calculate_awards()
+    assert awards['least_cards']['name'] == 'Bob'
+    assert awards['quickest']['name'] == 'Bob'
+    assert awards['most_nudges']['name'] == 'Bob'
+    assert awards['most_penalties']['name'] == 'Alice'
+    assert awards['most_power']['name'] == 'Alice'
+
+def test_bot_logic_plays_chain_of_cards():
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', BOT_NAME]
+    game.is_started = True
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': 'King'}],
+        BOT_NAME: [
+            {'suit': 'Spades', 'value': '5'},
+            {'suit': 'Hearts', 'value': '5'},
+            {'suit': 'Diamonds', 'value': '5'},
+            {'suit': 'Clubs', 'value': '8'}
+        ]
+    }
+    game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
+    game.current_turn_index = 1
+    
+    app.game = game
+    app.run_bot_logic()
+    
+    assert len(game.hands[BOT_NAME]) == 1
+    assert game.hands[BOT_NAME][0]['value'] == '8'
+    assert game.current_turn_index == 0 # Turn advanced to Alice
+
+def test_bot_logic_plays_penalty_chain():
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', BOT_NAME]
+    game.is_started = True
+    game.active_penalty_type = '2'
+    game.accumulated_penalty = 2
+    game.hands = {
+        'Alice': [{'suit': 'Diamonds', 'value': '2'}],
+        BOT_NAME: [
+            {'suit': 'Spades', 'value': '2'},
+            {'suit': 'Hearts', 'value': '2'},
+            {'suit': 'Diamonds', 'value': '5'}
+        ]
+    }
+    game.discard_pile = [{'suit': 'Clubs', 'value': '2'}]
+    game.current_turn_index = 1
+    
+    app.game = game
+    app.run_bot_logic()
+    
+    # Played two 2s
+    assert len(game.hands[BOT_NAME]) == 1
+    assert game.accumulated_penalty == 6
+    assert game.active_penalty_type == '2'

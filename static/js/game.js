@@ -3,6 +3,12 @@ let currentHand = [];
 let selectedCards = [];
 let globalState = {};
 let lastPenalized = { name: null, amount: 0 };
+let spectatorHandsData = null;
+
+// Available avatar selections
+const AVATARS = [
+    '👤', '😎', '🤠', '👽', '👾', '🐱', '🐶', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🦇', '🦉', '🦄'
+];
 
 // Web Audio API context for synthesized game sounds
 let audioCtx = null;
@@ -136,10 +142,6 @@ function drawOrResolve() {
 function selectAceSuit(suit) {
     socket.emit('declare_ace_suit', { suit: suit });
     document.getElementById('ace-modal').style.display = 'none';
-}
-
-function cascade(suit) {
-    socket.emit('queen_cascade', { suit: suit });
 }
 
 function triggerNudge(targetPlayer) {
@@ -286,11 +288,18 @@ socket.on('state_update', (state) => {
 
         if (isPenalized) row.classList.add('penalty-target');
 
+        const avatar = (state.avatars && state.avatars[p]) ? state.avatars[p] : (p === '🤖 Computer' ? '🤖' : '👤');
+        const isMe = p === clientName;
+        const avatarCursor = isMe ? 'style="cursor:pointer;" title="Click to change avatar" onclick="showAvatarModal()"' : '';
+        const avatarHtml = `<span class="player-avatar" ${avatarCursor}>${avatar}</span>`;
+
+        row.dataset.name = p;
         row.innerHTML = `
             <div class="player-meta">
-                <span>${pLabel} ${state.is_started ? statusText : '⏳ Ready'} ${lastIcon} ${penaltyIcon}</span>
+                <span>${avatarHtml} ${pLabel} ${state.is_started ? statusText : '⏳ Ready'} ${lastIcon} ${penaltyIcon}</span>
                 ${rightControls}
             </div>
+            <div class="spectator-hand-tray" style="display:none;"></div>
         `;
         listContainer.appendChild(row);
 
@@ -325,16 +334,67 @@ socket.on('state_update', (state) => {
         });
     }
 
-    // Queen Cascade Control Drawer Visibility Hooks
-    const qActions = document.getElementById('queen-actions');
-    if(state.is_started && state.current_player === clientName && state.top_card && state.top_card.value === 'Queen') {
-        qActions.style.display = 'block';
-    } else {
-        qActions.style.display = 'none';
+    // Clear spectator data if we are actively playing
+    const myHandSize = state.hand_sizes[clientName] || 0;
+    if (state.is_started && myHandSize > 0) {
+        spectatorHandsData = null;
     }
+    renderSpectatorHands();
 
     evaluateButtonAbilities();
 });
+
+socket.on('spectator_hands', (data) => {
+    spectatorHandsData = data.hands;
+    renderSpectatorHands();
+});
+
+function renderSpectatorHands() {
+    if (!spectatorHandsData) return;
+    const listContainer = document.getElementById('player-list-box');
+    if (!listContainer) return;
+    const rows = listContainer.getElementsByClassName('player-row');
+    
+    for (let row of rows) {
+        const pName = row.dataset.name;
+        const tray = row.querySelector('.spectator-hand-tray');
+        if (pName && tray && spectatorHandsData[pName]) {
+            tray.innerHTML = '';
+            tray.style.display = 'flex';
+            spectatorHandsData[pName].forEach(card => {
+                const cDiv = document.createElement('div');
+                cDiv.className = 'mini-card';
+                if (card.suit === 'Hearts' || card.suit === 'Diamonds') cDiv.classList.add('red');
+                const valStr = card.value === '10' ? '10' : card.value[0];
+                cDiv.innerHTML = `${valStr}${SUIT_EMOJIS[card.suit]}`;
+                tray.appendChild(cDiv);
+            });
+        } else if (tray) {
+            tray.style.display = 'none';
+        }
+    }
+}
+
+function createAvatarModal() {
+    if (document.getElementById('avatar-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'avatar-modal';
+    modal.className = 'generic-modal';
+    let gridHtml = '<div class="avatar-grid">';
+    AVATARS.forEach(a => {
+        gridHtml += `<div class="avatar-option" onclick="selectAvatar('${a}')">${a}</div>`;
+    });
+    gridHtml += '</div>';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <h3 style="margin-top:0;">Select Avatar</h3>
+            ${gridHtml}
+            <button onclick="document.getElementById('avatar-modal').style.display='none'">Close</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+createAvatarModal();
 
 socket.on('prompt_ace_suit', () => {
     document.getElementById('ace-modal').style.display = 'flex';
@@ -348,7 +408,28 @@ socket.on('game_log', (data) => {
 
 socket.on('game_over', (data) => {
     soundEffect('winner');
-    document.getElementById('game-over-text').innerText = `Winner: ${data.winner}!`;
+    let content = `<h2>Winner: ${data.winner}!</h2>`;
+    if (data.awards) {
+        content += `<div class="awards-section" style="margin-top: 20px; font-size: 0.9em; text-align: left; background: rgba(0,0,0,0.1); padding: 15px; border-radius: 8px;">`;
+        content += `<h3 style="margin-top: 0; text-align: center;">🏆 Fun Awards 🏆</h3>`;
+        if (data.awards.least_cards) {
+            content += `<div style="margin-bottom: 8px;">🃏 <b>Minimalist:</b> ${data.awards.least_cards.name} played the fewest cards (${data.awards.least_cards.value})</div>`;
+        }
+        if (data.awards.quickest) {
+            content += `<div style="margin-bottom: 8px;">⚡ <b>Speedster:</b> ${data.awards.quickest.name} averaged ${data.awards.quickest.value}s per turn</div>`;
+        }
+        if (data.awards.most_nudges) {
+            content += `<div style="margin-bottom: 8px;">🚨 <b>Impatient:</b> ${data.awards.most_nudges.name} sent the most nudges (${data.awards.most_nudges.value})</div>`;
+        }
+        if (data.awards.most_penalties) {
+            content += `<div style="margin-bottom: 8px;">🎯 <b>Target Practice:</b> ${data.awards.most_penalties.name} drew the most penalty cards (${data.awards.most_penalties.value})</div>`;
+        }
+        if (data.awards.most_power) {
+            content += `<div style="margin-bottom: 8px;">🔥 <b>Power Player:</b> ${data.awards.most_power.name} dropped the most power cards (${data.awards.most_power.value})</div>`;
+        }
+        content += `</div>`;
+    }
+    document.getElementById('game-over-text').innerHTML = content;
     document.getElementById('game-over-modal').style.display = 'flex';
 });
 
@@ -356,18 +437,28 @@ function closeGameOverModal() {
     document.getElementById('game-over-modal').style.display = 'none';
 }
 
+function showAvatarModal() {
+    document.getElementById('avatar-modal').style.display = 'flex';
+}
+
+function selectAvatar(avatar) {
+    socket.emit('change_avatar', { avatar: avatar });
+    document.getElementById('avatar-modal').style.display = 'none';
+}
+
 // Expose core UI handlers globally for inline onclick attributes
 window.organizeHand = organizeHand;
 window.playSelected = playSelected;
 window.drawOrResolve = drawOrResolve;
 window.selectAceSuit = selectAceSuit;
-window.cascade = cascade;
 window.triggerNudge = triggerNudge;
 window.resetGame = resetGame;
 window.closeGameOverModal = closeGameOverModal;
 window.joinGame = joinGame;
 window.startGame = startGame;
 window.logout = logout;
+window.showAvatarModal = showAvatarModal;
+window.selectAvatar = selectAvatar;
 
 function logout() {
     localStorage.removeItem('blackjack_player_name');

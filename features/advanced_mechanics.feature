@@ -12,17 +12,14 @@ Feature: Advanced Gameplay Mechanics
     Then Alice should have 0 cards left
     And "Bob" should be the current player
 
-  Scenario: Executing a Queen Cascade with a penalty card
-    Given a game is in progress with Alice, Bob, and Charlie
-    And it is "Alice"'s turn
+  Scenario: Stacking multiple cards of the same suit on an existing Table Queen
+    Given a game is in progress with Alice and Bob
     And the top card is "Queen of Diamonds"
-    And Alice has "2 of Hearts" and "8 of Hearts" in hand
-    And Bob has "King of Spades" in hand
-    And Charlie has "2 of Clubs" in hand
-    When Alice executes a Queen Cascade on "Hearts"
-    Then the accumulated penalty should be 2
-    And "Alice" should have 0 cards left
-    And "Charlie" should be the current player
+    And it is "Alice"'s turn
+    And Alice has "5 of Diamonds", "6 of Diamonds", and "Jack of Diamonds" in hand
+    When Alice plays the chain: "5 of Diamonds", "6 of Diamonds"
+    Then Alice should have 1 cards left
+    And the turn should return to Bob
 
   Scenario: Playing multiple 8s skips multiple players
     Given a lobby has 3 players "Alice", "Bob", and "Charlie"
@@ -67,3 +64,35 @@ Feature: Advanced Gameplay Mechanics
     When the game starts
     Then "🤖 Computer" should not be in the lobby
     And the lobby should have 2 players
+
+  Scenario: Calculating end of game fun awards
+    Given a game is in progress with Alice and Bob
+    And Alice has played 2 cards
+    And Bob has played 10 cards
+    And Alice has received 5 penalty cards
+    And Bob has sent 3 nudges
+    And Alice has played 5 power cards
+    When the game calculates awards
+    Then "Alice" should receive the minimalist award
+    And "Alice" should receive the most penalized award
+    And "Bob" should receive the most nudges award
+    And "Alice" should receive the power player award
+
+  Scenario: Computer player plays a chain of cards of the same rank
+    Given a game is in progress with Alice and 🤖 Computer
+    And the top card is "10 of Hearts"
+    And "🤖 Computer" has "5 of Hearts", "5 of Spades", "5 of Diamonds", and "King of Spades" in hand
+    And it is "🤖 Computer"'s turn
+    When the computer takes its turn
+    Then "🤖 Computer" should have 1 cards left
+    And the turn should return to Alice
+
+  Scenario: Computer player plays a chain of penalty cards
+    Given a game is in progress with Alice and 🤖 Computer
+    And Alice just played a "2 of Clubs"
+    And Alice has "2 of Diamonds" in hand
+    And "🤖 Computer" has "2 of Spades", "2 of Hearts", and "5 of Diamonds" in hand
+    And it is "🤖 Computer"'s turn
+    When the computer takes its turn
+    Then "🤖 Computer" should have 1 cards left
+    And the accumulated penalty should be 6

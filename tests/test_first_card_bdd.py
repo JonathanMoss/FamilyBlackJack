@@ -24,6 +24,8 @@ if 'flask' not in sys.modules:
     flask_stub.render_template = lambda *args, **kwargs: ''
     flask_stub.request = types.SimpleNamespace(sid=None)
     flask_stub.session = {}
+    flask_stub.redirect = lambda *args, **kwargs: ''
+    flask_stub.url_for = lambda *args, **kwargs: ''
     sys.modules['flask'] = flask_stub
 
 if 'flask_socketio' not in sys.modules:

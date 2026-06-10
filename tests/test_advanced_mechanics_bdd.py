@@ -22,6 +22,8 @@ if 'flask' not in sys.modules:
     flask_stub.render_template = lambda *args, **kwargs: ''
     flask_stub.request = types.SimpleNamespace(sid=None)
     flask_stub.session = {}
+    flask_stub.redirect = lambda *args, **kwargs: ''
+    flask_stub.url_for = lambda *args, **kwargs: ''
     sys.modules['flask'] = flask_stub
 
 if 'flask_socketio' not in sys.modules:
@@ -36,6 +38,10 @@ if 'flask_socketio' not in sys.modules:
             def decorator(fn):
                 return fn
             return decorator
+        def start_background_task(self, task, *args, **kwargs):
+            pass
+        def sleep(self, seconds):
+            pass
 
     socketio_stub = types.ModuleType('flask_socketio')
     socketio_stub.SocketIO = SocketIOStub
@@ -44,6 +50,7 @@ if 'flask_socketio' not in sys.modules:
     sys.modules['flask_socketio'] = socketio_stub
 
 from app import FamilyBlackjackEngine, BOT_NAME
+import app
 
 FEATURE_FILE = os.path.join(os.path.dirname(__file__), '..', 'features', 'advanced_mechanics.feature')
 
@@ -54,8 +61,11 @@ def engine():
 @scenario(FEATURE_FILE, 'Queen allows a manual suit chain followed by rank matching')
 def test_manual_queen_chain(): pass
 
-@scenario(FEATURE_FILE, 'Executing a Queen Cascade with a penalty card')
-def test_cascade_with_penalty(): pass
+@scenario(FEATURE_FILE, 'Calculating end of game fun awards')
+def test_end_of_game_fun_awards(): pass
+
+@scenario(FEATURE_FILE, 'Stacking multiple cards of the same suit on an existing Table Queen')
+def test_manual_chain_on_table_queen(): pass
 
 @scenario(FEATURE_FILE, 'Playing multiple 8s skips multiple players')
 def test_multi_eight_skip(): pass
@@ -74,6 +84,12 @@ def test_bot_yield_on_join(): pass
 
 @scenario(FEATURE_FILE, 'Computer player yields when a match starts with enough humans')
 def test_bot_yield_on_start(): pass
+
+@scenario(FEATURE_FILE, 'Computer player plays a chain of cards of the same rank')
+def test_bot_chains_multiple_cards(): pass
+
+@scenario(FEATURE_FILE, 'Computer player plays a chain of penalty cards')
+def test_bot_chains_penalty_cards(): pass
 
 def clean(text):
     return text.strip().strip('"') if text else text
@@ -100,6 +116,13 @@ def game_with_players(engine, players):
     engine.active_penalty_type = None
     engine.accumulated_penalty = 0
     engine.penalty_source = None
+    engine.match_stats = {
+        p: {
+            'cards_played': 0, 'turn_time_total': 0.0,
+            'turn_count': 0, 'nudges_sent': 0,
+            'penalties_received': 0, 'power_cards_played': 0
+        } for p in engine.players
+    }
     return engine
 
 @given(parsers.parse('it is "{name}"\'s turn'))
@@ -125,7 +148,7 @@ def set_top_card(game, card_spec):
     game.accumulated_penalty = 0
     game.penalty_source = None
 
-@given(parsers.re(r'^(?P<name>[\w"]+) has (?P<cards>".+") in hand$'))
+@given(parsers.re(r'^(?P<name>.+?) has (?P<cards>".+") in hand$'))
 def set_hand(game, name, cards):
     cleaned_name = clean(name)
     # Handle lists like '"Card A", "Card B", and "Card C"' or '"Card A" and "Card B"'
@@ -146,7 +169,7 @@ def simulate_penalty_play(game, name, card_spec):
     game.discard_pile.append({'suit': suit, 'value': val})
     game.deck = game.build_deck()
 
-@given(parsers.re(r'^(?P<name>[\w"]+) has no "(?P<val>\w+)" in hand$'))
+@given(parsers.re(r'^(?P<name>.+?) has no "(?P<val>\w+)" in hand$'))
 def ensure_no_counter(game, name, val):
     game.hands[clean(name)] = [{'suit': 'Spades', 'value': 'King'}] # Generic non-power card
 
@@ -163,11 +186,10 @@ def play_chain(game, name, cards):
     assert success, f"Move failed: {msg}"
     game.advance_turn(steps=1 + skips)
 
-@when(parsers.parse('{name} executes a Queen Cascade on "{suit}"'))
-def execute_cascade(game, name, suit):
-    success, msg, skips = game.execute_queen_cascade(clean(name), suit)
-    assert success, f"Cascade failed: {msg}"
-    game.advance_turn(steps=1 + skips)
+@when('the computer takes its turn')
+def bot_takes_turn(game):
+    app.game = game
+    app.run_bot_logic()
 
 @when(parsers.parse('"{name}" joins the lobby'))
 def join_lobby_action(game, name):
@@ -214,6 +236,46 @@ def check_autodraw_result(game, name, count):
 @then(parsers.parse('the turn should return to {name}'))
 def check_turn_return(game, name):
     assert game.get_current_player_name() == clean(name)
+
+@given(parsers.parse('{name} has played {count:d} cards'))
+def set_cards_played(game, name, count):
+    game.match_stats[clean(name)]['cards_played'] = count
+    game.match_stats[clean(name)]['turn_count'] = 1
+
+@given(parsers.parse('{name} has received {count:d} penalty cards'))
+def set_penalties_received(game, name, count):
+    game.match_stats[clean(name)]['penalties_received'] = count
+    game.match_stats[clean(name)]['turn_count'] = 1
+
+@given(parsers.parse('{name} has sent {count:d} nudges'))
+def set_nudges_sent(game, name, count):
+    game.match_stats[clean(name)]['nudges_sent'] = count
+    game.match_stats[clean(name)]['turn_count'] = 1
+
+@given(parsers.parse('{name} has played {count:d} power cards'))
+def set_power_cards(game, name, count):
+    game.match_stats[clean(name)]['power_cards_played'] = count
+    game.match_stats[clean(name)]['turn_count'] = 1
+
+@when('the game calculates awards', target_fixture='calculated_awards')
+def calculate_awards_bdd(game):
+    return game.calculate_awards()
+
+@then(parsers.parse('"{name}" should receive the minimalist award'))
+def check_minimalist_award(calculated_awards, name):
+    assert calculated_awards['least_cards']['name'] == clean(name)
+
+@then(parsers.parse('"{name}" should receive the most penalized award'))
+def check_penalized_award(calculated_awards, name):
+    assert calculated_awards['most_penalties']['name'] == clean(name)
+
+@then(parsers.parse('"{name}" should receive the most nudges award'))
+def check_nudges_award(calculated_awards, name):
+    assert calculated_awards['most_nudges']['name'] == clean(name)
+
+@then(parsers.parse('"{name}" should receive the power player award'))
+def check_power_player_award(calculated_awards, name):
+    assert calculated_awards['most_power']['name'] == clean(name)
 
 # Helper fixtures for lobby creation...
 @given(parsers.parse('a lobby has 3 players "{p1}", "{p2}", and "{p3}"'), target_fixture='game')

@@ -68,6 +68,59 @@ h1 { font-size: 1.8rem; margin: 10px 0; }
 .nudge-btn { background: transparent !important; box-shadow: none !important; padding: 2px 6px !important; margin: 0 !important; font-size: 16px !important; opacity: 0.8; transition: transform 0.1s ease; }
 .nudge-btn:hover { transform: scale(1.3); opacity: 1; }
 
+/* Player Avatars */
+.player-avatar {
+    font-size: 20px;
+    vertical-align: middle;
+    margin-right: 6px;
+    display: inline-block;
+    transition: transform 0.2s ease, filter 0.2s ease;
+}
+.player-avatar[onclick]:hover {
+    transform: scale(1.3) rotate(8deg);
+    filter: drop-shadow(0 0 5px rgba(255, 235, 59, 0.8));
+}
+.avatar-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin: 15px 0;
+    padding: 5px;
+}
+.avatar-option {
+    font-size: 32px;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 6px;
+    text-align: center;
+}
+.avatar-option:hover {
+    transform: scale(1.15);
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+/* Spectator Hand View */
+.spectator-hand-tray {
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.2);
+}
+.mini-card {
+    background: white;
+    color: black;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 11px;
+    font-weight: 800;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.mini-card.red { color: #d9534f; }
+
 /* 🃏 PLAYING CARD GRID LAYOUT ENGINE 🃏 */
 .card { 
     display: inline-block; 
@@ -477,3 +530,35 @@ button:disabled { background: #4a544c !important; color: #888 !important; cursor
 .turn-badge.my-turn .timer-bar {
     background: #00ff66;
 }
+
+/* Fun Awards Panel Animations */
+@keyframes awardPopIn {
+    0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.awards-section {
+    /* Main panel pops in first */
+    animation: awardPopIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 215, 0, 0.4); /* subtle gold border */
+}
+
+/* Ensure the child div elements start hidden for the staggered animation */
+.awards-section > div {
+    opacity: 0;
+    animation: awardPopIn 0.5s ease-out forwards;
+}
+
+/* Stagger the entrance of each individual award line */
+.awards-section > div:nth-child(2) { animation-delay: 0.3s; }
+.awards-section > div:nth-child(3) { animation-delay: 0.6s; }
+.awards-section > div:nth-child(4) { animation-delay: 0.9s; }
+.awards-section > div:nth-child(5) { animation-delay: 1.2s; }
+.awards-section > div:nth-child(6) { animation-delay: 1.5s; }

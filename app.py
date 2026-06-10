@@ -5,6 +5,7 @@ and career stats persistence.
 """
 
 import random
+import time
 # pylint: disable=import-error
 from flask import Flask, render_template, request, session, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room
@@ -46,6 +47,10 @@ class FamilyBlackjackEngine:
         # Track which player caused the current accumulated penalty (if any)
         self.penalty_source = None
 
+        self.match_stats = {}
+        self.current_turn_start_time = 0.0
+        self.avatars = {}
+
     def reset_lobby(self):
         """Reset the match room engine back to baseline factory defaults."""
         self.players = []
@@ -62,6 +67,9 @@ class FamilyBlackjackEngine:
         self.accumulated_penalty = 0
         self.declared_ace_suit = None
         self.penalty_source = None
+        self.match_stats = {}
+        self.current_turn_start_time = 0.0
+        self.avatars = {}
         # Note: We intentionally DO NOT clear league_wins or league_losses
         # so career family stats persist across separate game room lobbies!
 
@@ -82,6 +90,8 @@ class FamilyBlackjackEngine:
         self.accumulated_penalty = 0
         self.declared_ace_suit = None
         self.penalty_source = None
+        self.match_stats = {}
+        self.current_turn_start_time = 0.0
 
     def build_deck(self):  # pylint: disable=no-self-use
         """Construct a fresh 52-card deck array and shuffle it.
@@ -117,6 +127,8 @@ class FamilyBlackjackEngine:
         if name not in self.players:
             self.players.append(name)
             self.hands[name] = []
+            if name not in self.avatars:
+                self.avatars[name] = '🤖' if name == BOT_NAME else '👤'
 
             # If the lobby is idle and we now have multiple humans, remove the bot
             if not self.is_started:
@@ -142,6 +154,7 @@ class FamilyBlackjackEngine:
         if len(self.players) == 1:
             if BOT_NAME not in self.players:
                 self.players.append(BOT_NAME)
+                self.avatars[BOT_NAME] = '🤖'
 
         if len(self.players) < 2:
             return False
@@ -164,6 +177,18 @@ class FamilyBlackjackEngine:
         self.accumulated_penalty = 0
         self.declared_ace_suit = None
         self.penalty_source = None
+
+        self.match_stats = {
+            p: {
+                'cards_played': 0,
+                'turn_time_total': 0.0,
+                'turn_count': 0,
+                'nudges_sent': 0,
+                'penalties_received': 0,
+                'power_cards_played': 0
+            } for p in self.players
+        }
+        self.current_turn_start_time = time.time()
 
         # --- ROTATION LOGIC ---
         # Update dealer and starting turn BEFORE checking for specialty starter cards
@@ -200,7 +225,7 @@ class FamilyBlackjackEngine:
         if not self.players or not self.is_started:
             return
         attempts = 0
-        while (not self.hands.get(self.players[self.current_turn_index]) and 
+        while (not self.hands.get(self.players[self.current_turn_index]) and
                attempts < len(self.players)):
             self.current_turn_index = (self.current_turn_index + self.direction) % len(self.players)
             attempts += 1
@@ -209,9 +234,18 @@ class FamilyBlackjackEngine:
         """Pass turn control down the user tracking registry, skipping spectators."""
         if not self.players:
             return
+
+        current_p = self.get_current_player_name()
+        if self.is_started and getattr(self, 'match_stats', None) and current_p in self.match_stats:
+            elapsed = time.time() - self.current_turn_start_time
+            self.match_stats[current_p]['turn_time_total'] += elapsed
+            self.match_stats[current_p]['turn_count'] += 1
+
         for _ in range(steps):
             self.current_turn_index = (self.current_turn_index + self.direction) % len(self.players)
             self._skip_spectators()
+
+        self.current_turn_start_time = time.time()
         self.check_and_enforce_autodraw()
 
     def has_valid_penalty_counter(self, name):
@@ -290,6 +324,11 @@ class FamilyBlackjackEngine:
                 drawn.append(self.deck.pop())
         if name in self.hands:
             self.hands[name].extend(drawn)
+
+        if name in getattr(self, 'match_stats', {}):
+            if reason and 'penalty' in reason:
+                self.match_stats[name]['penalties_received'] += len(drawn)
+
         # Notify the receiving player's client about the drawn cards
         if drawn:
             target_sid = self.name_to_sid.get(name)
@@ -453,45 +492,51 @@ class FamilyBlackjackEngine:
             player_hand.remove(card)
             self.discard_pile.append(card)
 
+        if name in getattr(self, 'match_stats', {}):
+            self.match_stats[name]['cards_played'] += len(matched_cards)
+            power_count = sum(1 for c in matched_cards if c['value'] in ['2', '8', 'Jack', 'Queen', 'Ace'])
+            self.match_stats[name]['power_cards_played'] = self.match_stats[name].get('power_cards_played', 0) + power_count
+
         return True, "Success", eight_skips
 
-    def execute_queen_cascade(self, name, suit_to_dump):
-        """Discard all cards matching a target suit following a Queen play.
+    def calculate_awards(self):
+        """Determine end-of-game fun awards based on match statistics."""
+        awards = {}
+        if not getattr(self, 'match_stats', None):
+            return awards
 
-        Args:
-            name (str): Player username validation identifier.
-            suit_to_dump (str): Target card suit to purge.
+        stats = self.match_stats
+        active_players = [p for p in stats if stats[p]['turn_count'] > 0]
+        if not active_players:
+            return awards
 
-        Returns:
-        tuple: (bool success status, str outcome message, int skips)
-        """
-        if name != self.get_current_player_name():
-            return False, "Not your turn.", 0
-        if not self.discard_pile or self.discard_pile[-1]['value'] != 'Queen':
-            return False, "Top card is not a Queen.", 0
+        # 1. Least Cards Played
+        least_cards = min(active_players, key=lambda p: stats[p]['cards_played'])
+        awards['least_cards'] = {'name': least_cards, 'value': stats[least_cards]['cards_played']}
 
-        player_hand = self.hands[name]
-        cards_to_dump = [
-            card for card in player_hand if card['suit'] == suit_to_dump
-        ]
+        # 2. Quickest Player
+        def avg_time(p):
+            return stats[p]['turn_time_total'] / stats[p]['turn_count']
 
-        if not cards_to_dump:
-            return True, "No cards of that suit to dump.", 0
+        quickest = min(active_players, key=avg_time)
+        awards['quickest'] = {'name': quickest, 'value': round(avg_time(quickest), 1)}
 
-        skips = 0
-        for card in cards_to_dump:
-            player_hand.remove(card)
-            self.discard_pile.append(card)
+        # 3. Most Nudges
+        most_nudges = max(active_players, key=lambda p: stats[p]['nudges_sent'])
+        if stats[most_nudges]['nudges_sent'] > 0:
+            awards['most_nudges'] = {'name': most_nudges, 'value': stats[most_nudges]['nudges_sent']}
 
-            # Update penalty state for every card dumped
-            (self.active_penalty_type,
-             self.accumulated_penalty,
-             self.penalty_source) = self._calculate_penalty_update(
-                 card, self.active_penalty_type, self.accumulated_penalty, name
-             )
-            if card['value'] == '8':
-                skips += 1
-        return True, f"Dumped {len(cards_to_dump)} cards.", skips
+        # 4. Most Penalized
+        most_penalized = max(active_players, key=lambda p: stats[p]['penalties_received'])
+        if stats[most_penalized]['penalties_received'] > 0:
+            awards['most_penalties'] = {'name': most_penalized, 'value': stats[most_penalized]['penalties_received']}
+
+        # 5. Most Power Cards
+        most_power = max(active_players, key=lambda p: stats[p].get('power_cards_played', 0))
+        if stats[most_power].get('power_cards_played', 0) > 0:
+            awards['most_power'] = {'name': most_power, 'value': stats[most_power]['power_cards_played']}
+
+        return awards
 
 
 # Global instances tracking core system state mechanics
@@ -529,7 +574,7 @@ def handle_join(data):
         was_started = game.is_started
         bot_yielded = game.add_player(name)
         if was_started:
-            socketio.emit('game_log', 
+                socketio.emit('game_log',
                          {'msg': f"👁️ {name} joined as an observer and will play in the next match."}, room='game_room')
         elif bot_yielded:
             socketio.emit('game_log', {'msg': f"{BOT_NAME} has left the table to make room for humans."}, room='game_room')
@@ -586,25 +631,41 @@ def run_bot_logic():
         else:
             matches = [c for c in hand if c['value'] == 'Jack']
         if matches:
-            possible_play = [matches[0]]
+            possible_play = matches
     else:
         # Regular turn logic
         active_suit = game.declared_ace_suit if (game.declared_ace_suit and top_card['value'] == 'Ace') else top_card['suit']
         active_val = top_card['value']
-        for c in hand:
-            if c['value'] == 'Ace' or c['value'] == active_val or c['suit'] == active_suit:
-                possible_play = [c]
-                break
+        
+        valid_starters = [c for c in hand if c['value'] == 'Ace' or c['value'] == active_val or c['suit'] == active_suit]
+        if valid_starters:
+            best_chain = []
+            for starter in valid_starters:
+                chain = [starter]
+                for c in hand:
+                    if c != starter and c['value'] == starter['value']:
+                        chain.append(c)
+                if len(chain) > len(best_chain):
+                    best_chain = chain
+            possible_play = best_chain
 
     if possible_play:
         success, msg, skips = game.validate_and_play_move(BOT_NAME, possible_play)
         if success:
-            socketio.emit('game_log', {'msg': f"📝 {BOT_NAME} played: {possible_play[0]['value']} of {possible_play[0]['suit']}"}, room='game_room')
-            
+            cards_desc = ", ".join([f"{c['value']} of {c['suit']}" for c in possible_play])
+            socketio.emit('game_log', {'msg': f"📝 {BOT_NAME} played a chain: {cards_desc}"}, room='game_room')
+
             if len(game.hands.get(BOT_NAME, [])) == 0:
+                if BOT_NAME in getattr(game, 'match_stats', {}):
+                    elapsed = time.time() - game.current_turn_start_time
+                    game.match_stats[BOT_NAME]['turn_time_total'] += elapsed
+                    game.match_stats[BOT_NAME]['turn_count'] += 1
+
                 game.update_league_results(BOT_NAME)
                 game.is_started = False
-                socketio.emit('game_over', {'winner': BOT_NAME}, room='game_room')
+
+                awards = game.calculate_awards()
+                socketio.emit('game_over', {'winner': BOT_NAME, 'awards': awards}, room='game_room')
                 broadcast_state()
                 return
 
@@ -693,6 +754,7 @@ def handle_start():
         emit('error', {'msg': 'Need at least 2 players to start!'})
 
 
+# pylint: disable=too-many-locals, too-many-branches, too-many-statements
 @socketio.on('play_cards')
 def handle_play(data):
     """Process incoming discard execution actions."""
@@ -715,6 +777,11 @@ def handle_play(data):
 
         # 🏁 CRITICAL FIX: VICTORY POSITION CLEANUP
         if len(game.hands.get(name, [])) == 0:
+            if name in getattr(game, 'match_stats', {}):
+                elapsed = time.time() - game.current_turn_start_time
+                game.match_stats[name]['turn_time_total'] += elapsed
+                game.match_stats[name]['turn_count'] += 1
+
             game.update_league_results(name)
 
             game.is_started = False
@@ -723,7 +790,12 @@ def handle_play(data):
             game.declared_ace_suit = None
             game.penalty_source = None
 
-            socketio.emit('game_over', {'winner': name}, room='game_room')
+            awards = game.calculate_awards()
+            socketio.emit(
+                'game_over',
+                {'winner': name, 'awards': awards},
+                room='game_room'
+            )
             socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
             broadcast_state()
             return None
@@ -795,56 +867,27 @@ def handle_reset_match():
         return
 
     game.reset_match()
-    socketio.emit('game_log', {'msg': f"🧹 {requester} reset the current match."}, room='game_room')
-    socketio.emit('room_reset', {'msg': 'Match has been reset by a player.'}, room='game_room')
+    socketio.emit(
+        'game_log',
+        {'msg': f"🧹 {requester} reset the current match."},
+        room='game_room'
+    )
+    socketio.emit(
+        'room_reset',
+        {'msg': 'Match has been reset by a player.'},
+        room='game_room'
+    )
     broadcast_state()
 
 
-@socketio.on('queen_cascade')
-def handle_cascade(data):
-    """Execute sequence cleanouts on active Queen states."""
+@socketio.on('change_avatar')
+def handle_change_avatar(data):
+    """Update the player's chosen avatar and broadcast the change."""
     sid = request.sid
     name = game.sid_to_name.get(sid)
-    if not name or name != game.get_current_player_name():
-        return
-    suit = data.get('suit')
-    success, msg, skips = game.execute_queen_cascade(name, suit)
-    if success:
-        log_msg = f"👑 {name} executed a Queen Cascade on {suit}!"
-        socketio.emit(
-            'game_log', {'msg': log_msg}, room='game_room'
-        )
-        socketio.emit('play_sound', {'type': 'play'}, room='game_room')
-
-        if len(game.hands.get(name, [])) == 0:
-            game.update_league_results(name)
-            game.is_started = False
-            game.accumulated_penalty = 0
-            game.active_penalty_type = None
-            game.declared_ace_suit = None
-            game.penalty_source = None
-
-            socketio.emit('game_over', {'winner': name}, room='game_room')
-            socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
-        else:
-            if len(game.hands.get(name, [])) == 1:
-                last_card_msg = (
-                    f"📢 🔥 LAST CARD! {name} is down to their final card!"
-                )
-                socketio.emit(
-                    'game_log', {'msg': last_card_msg}, room='game_room'
-                )
-
-            turn_steps = 1 + skips
-            if skips > 0:
-                skip_msg = f"skip 🛑 {skips} player(s) skipped by cascaded 8s!"
-                socketio.emit('game_log', {'msg': skip_msg}, room='game_room')
-
-            game.advance_turn(steps=turn_steps)
+    if name:
+        game.avatars[name] = data.get('avatar', '👤')
         broadcast_state()
-        check_for_bot_turn()
-    else:
-        emit('error', {'msg': msg})
 
 
 @socketio.on('take_penalty_or_draw')
@@ -889,6 +932,10 @@ def handle_nudge(data):
     """Pass connection message nudge payloads to specific players."""
     sid = request.sid
     sender_name = game.sid_to_name.get(sid, "Someone")
+
+    if sender_name in getattr(game, 'match_stats', {}):
+        game.match_stats[sender_name]['nudges_sent'] += 1
+
     target_name = data.get('target')
     emoji = data.get('emoji', '👋')
     if target_name not in game.players:
@@ -984,6 +1031,7 @@ def broadcast_state():
         'penalty': game.accumulated_penalty,
         'penalty_type': game.active_penalty_type,
         'player_list': game.players,
+        'avatars': getattr(game, 'avatars', {}),
         'hand_sizes': {
             p: len(game.hands[p]) for p in game.players if p in game.hands
         },
@@ -996,6 +1044,18 @@ def broadcast_state():
         if target_sid:
             hand = game.hands.get(name, [])
             socketio.emit('your_hand', {'hand': hand}, to=target_sid)
+
+                    # Spectator View: If the game is running and they have 0 cards,
+            # securely send them the hands of all active players!
+            if game.is_started and len(hand) == 0:
+                spectator_hands = {
+                    p_name: game.hands.get(p_name, [])
+                    for p_name in game.players
+                    if len(game.hands.get(p_name, [])) > 0
+                }
+                socketio.emit(
+                    'spectator_hands', {'hands': spectator_hands}, to=target_sid
+                )
 
 
 if __name__ == '__main__':
