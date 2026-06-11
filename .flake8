@@ -1,0 +1,11 @@
+[flake8]
+# Align Flake8's line length with Pylint's 100 character limit
+max-line-length = 100
+
+# Exclude virtual environments and cached files
+exclude = .venv, venv, env, __pycache__, node_modules, .git
+
+# Ignore rules that often conflict with formatting best practices
+# E203: Whitespace before ':' (Conflicts with Black formatter if you use it later)
+# W503: Line break before binary operator (PEP 8 actually recommends breaking *before* the operator)
+ignore = E203, W503
