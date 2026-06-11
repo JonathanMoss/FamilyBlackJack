@@ -8,8 +8,19 @@
     <script src="/static/js/socket.io.min.js"></script>
     
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body.not-joined button {
+            display: none !important;
+        }
+        body.not-joined #setup-panel button {
+            display: inline-block !important;
+        }
+        body.not-joined .hand-panel {
+            display: none !important;
+        }
+    </style>
 </head>
-<body>
+<body class="not-joined">
 
     <div id="toast-notification"></div>
 
@@ -77,6 +88,8 @@
     <div class="lobby-actions" id="lobby-controls">
         <button onclick="startGame()" style="width: 100%; margin: 4px 0;">🚀 Start Game</button>
         <button onclick="resetGame()" style="width: 100%; margin: 4px 0; background: #b02a37; color: white;">🧹 Reset Game</button>
+        <button onclick="startDemo()" id="start-demo-btn" style="width: 100%; margin: 4px 0; background: #17a2b8; color: white;">🤖 Start 3-Bot Demo</button>
+        <button onclick="stopDemo()" id="stop-demo-btn" style="width: 100%; margin: 4px 0; background: #fd7e14; color: white; display: none;">🛑 Finish Demo</button>
     </div>
 </div>
 

@@ -736,6 +736,9 @@ def run_bot_logic(expected_bot_name):
                 # Must sleep slightly to allow UI to react before the bot plays a card
                 socketio.sleep(1.0)
 
+    if not game.is_started or not game.discard_pile:
+        return
+
     # 2. Decide on a move
     hand = game.hands.get(bot_name, [])
     possible_play = None
@@ -820,6 +823,8 @@ def run_bot_logic(expected_bot_name):
             broadcast_state()
             # Artificial delay for natural feel after playing cards
             socketio.sleep(2.0)
+            if not game.is_started:
+                return
 
             game.advance_turn(steps=1 + skips)
         else:
@@ -827,6 +832,8 @@ def run_bot_logic(expected_bot_name):
                 game.draw_card(bot_name, 1, reason='draw_fallback')
                 broadcast_state()
                 socketio.sleep(2.0)
+                if not game.is_started:
+                    return
                 game.advance_turn()
     else:
         # Must draw
@@ -845,6 +852,8 @@ def run_bot_logic(expected_bot_name):
                 game.draw_card(bot_name, 1, reason='draw')
             broadcast_state()
             socketio.sleep(2.0)
+            if not game.is_started:
+                return
             game.advance_turn()
 
     broadcast_state()
@@ -969,6 +978,42 @@ def handle_start_demo():
         _broadcast_match_start()
     else:
         emit('error', {'msg': 'Failed to start demo mode!'})
+
+
+@socketio.on('stop_demo')
+def handle_stop_demo():
+    """Finish the demo mode and return human clients back to the lobby."""
+    sid = request.sid
+    requester = game.sid_to_name.get(sid, "Someone")
+
+    socketio.emit(
+        'game_log',
+        {'msg': f"🛑 {requester} finished the Demo Mode. Returning to lobby..."},
+        room='game_room'
+    )
+
+    # Stop the game loop flag
+    game.is_started = False
+
+    # Remove all bots
+    bots = [p for p in game.players if p.startswith('🤖')]
+    for bot in bots:
+        game.players.remove(bot)
+        if bot in game.hands:
+            del game.hands[bot]
+
+    # Restore human players based on active connections
+    for human_name in game.sid_to_name.values():
+        game.add_player(human_name)
+
+    game.reset_match()
+
+    socketio.emit(
+        'room_reset',
+        {'msg': 'Demo stopped, lobby restored.'},
+        room='game_room'
+    )
+    broadcast_state()
 
 
 @socketio.on('start_match')
@@ -1292,23 +1337,22 @@ def broadcast_state():
     }
     socketio.emit('state_update', state, room='game_room')
 
-    for name in game.players:
-        target_sid = game.name_to_sid.get(name)
-        if target_sid:
-            hand = game.hands.get(name, [])
-            socketio.emit('your_hand', {'hand': hand}, to=target_sid)
+    # We broadcast hands to ALL connected clients so spectators accurately receive data
+    for sid, name in game.sid_to_name.items():
+        hand = game.hands.get(name, [])
+        socketio.emit('your_hand', {'hand': hand}, to=sid)
 
-                    # Spectator View: If the game is running and they have 0 cards,
-            # securely send them the hands of all active players!
-            if game.is_started and len(hand) == 0:
-                spectator_hands = {
-                    p_name: game.hands.get(p_name, [])
-                    for p_name in game.players
-                    if len(game.hands.get(p_name, [])) > 0
-                }
-                socketio.emit(
-                    'spectator_hands', {'hands': spectator_hands}, to=target_sid
-                )
+        # Spectator View: If the game is running and they have 0 cards,
+        # securely send them the hands of all active players!
+        if game.is_started and len(hand) == 0:
+            spectator_hands = {
+                p_name: game.hands.get(p_name, [])
+                for p_name in game.players
+                if len(game.hands.get(p_name, [])) > 0
+            }
+            socketio.emit(
+                'spectator_hands', {'hands': spectator_hands}, to=sid
+            )
 
 
 if __name__ == '__main__':

@@ -4,6 +4,7 @@ let selectedCards = [];
 let globalState = {};
 let lastPenalized = { name: null, amount: 0 };
 let spectatorHandsData = null;
+let isDemoMode = false;
 
 // Available avatar selections
 const AVATARS = [
@@ -224,21 +225,24 @@ socket.on('your_hand', (data) => {
 socket.on('state_update', (state) => {
     globalState = state;
     const clientName = document.getElementById('username').value.trim();
+    const isJoined = state.player_list.includes(clientName) || isDemoMode;
     
     // Auto-Lobby Setup Safety Valving
-    if (state.player_list.includes(clientName)) {
+    if (isJoined) {
+        document.body.classList.remove('not-joined');
         document.getElementById('setup-panel').style.display = 'none';
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
     } else {
+        document.body.classList.add('not-joined');
         document.getElementById('setup-panel').style.display = 'block';
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn) logoutBtn.style.display = 'none';
     }
 
-    if (state.is_started) {
+    if (state.is_started && !isDemoMode) {
         document.getElementById('lobby-controls').style.display = 'none';
-    } else {
+    } else if (isJoined) {
         document.getElementById('lobby-controls').style.display = 'block';
         let addBotBtn = document.getElementById('add-bot-btn');
         if (!addBotBtn) {
@@ -248,6 +252,8 @@ socket.on('state_update', (state) => {
             addBotBtn.onclick = () => socket.emit('add_bot');
             document.getElementById('lobby-controls').appendChild(addBotBtn);
         }
+    } else {
+        document.getElementById('lobby-controls').style.display = 'none';
     }
 
     // --- REFACTORED WORKFLOW: REPREMIUMIZED MATCH DASHBOARD SYSTEM ---
@@ -554,6 +560,8 @@ window.drawOrResolve = drawOrResolve;
 window.selectAceSuit = selectAceSuit;
 window.triggerNudge = triggerNudge;
 window.resetGame = resetGame;
+window.startDemo = startDemo;
+window.stopDemo = stopDemo;
 window.closeGameOverModal = closeGameOverModal;
 window.joinGame = joinGame;
 window.startGame = startGame;
@@ -675,6 +683,24 @@ function resetGame() {
     socket.emit('reset_match');
 }
 
+function startDemo() {
+    isDemoMode = true;
+    const startBtn = document.getElementById('start-demo-btn');
+    const stopBtn = document.getElementById('stop-demo-btn');
+    if (startBtn) startBtn.style.display = 'none';
+    if (stopBtn) stopBtn.style.display = 'inline-block';
+    socket.emit('start_demo');
+}
+
+function stopDemo() {
+    isDemoMode = false;
+    const startBtn = document.getElementById('start-demo-btn');
+    const stopBtn = document.getElementById('stop-demo-btn');
+    if (startBtn) startBtn.style.display = 'inline-block';
+    if (stopBtn) stopBtn.style.display = 'none';
+    socket.emit('stop_demo');
+}
+
 // Initialize the lobby with a decorative placeholder before socket/join events
 function initLobbyVisuals() {
     const frame = document.getElementById('top-card');
@@ -698,6 +724,13 @@ initLobbyVisuals();
 
 socket.on('room_reset', (data) => {
     showToast(data.msg || 'Match reset.');
+    
+    isDemoMode = false;
+    const startDemoBtn = document.getElementById('start-demo-btn');
+    if (startDemoBtn) startDemoBtn.style.display = 'inline-block';
+    const stopDemoBtn = document.getElementById('stop-demo-btn');
+    if (stopDemoBtn) stopDemoBtn.style.display = 'none';
+    
     // Close any open modals and clear hand UI
     document.getElementById('ace-modal').style.display = 'none';
     document.getElementById('game-over-modal').style.display = 'none';
