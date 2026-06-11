@@ -31,7 +31,7 @@ class FamilyBlackjackEngine:
         self.name_to_sid = {}      # Maps Username -> active connection sid
         self.hands = {}            # Maps Username -> Card Array
         self.deck = []
-        self.dis_pile = []
+        self.discard_pile = []
         self.current_turn_index = 0
         self.direction = 1
         self.is_started = False
@@ -42,7 +42,7 @@ class FamilyBlackjackEngine:
         # Penalty & Wildcard Tracking
         self.active_penalty_type = None
         self.accumulated_penalty = 0
-        self.dec_ace_suit = None
+        self.declared_ace_suit = None
 
         # Career League Standings Data
         self.league_wins = {}
@@ -63,14 +63,14 @@ class FamilyBlackjackEngine:
         self.name_to_sid = {}
         self.hands = {}
         self.deck = []
-        self.dis_pile = []
+        self.discard_pile = []
         self.current_turn_index = 0
         self.direction = 1
         self.is_started = False
         self.match_dealer_index = -1
         self.active_penalty_type = None
         self.accumulated_penalty = 0
-        self.dec_ace_suit = None
+        self.declared_ace_suit = None
         self.penalty_source = None
         self.match_stats = {}
         self.current_turn_start_time = 0.0
@@ -88,14 +88,14 @@ class FamilyBlackjackEngine:
         match (hands, deck, discard pile, penalties, and started flag).
         """
         self.deck = []
-        self.dis_pile = []
+        self.discard_pile = []
         self.hands = {name: [] for name in self.players}
         self.current_turn_index = 0
         self.direction = 1
         self.is_started = False
         self.active_penalty_type = None
         self.accumulated_penalty = 0
-        self.dec_ace_suit = None
+        self.declared_ace_suit = None
         self.penalty_source = None
         self.match_stats = {}
         self.current_turn_start_time = 0.0
@@ -168,7 +168,7 @@ class FamilyBlackjackEngine:
         if len(self.players) < 2:
             return False
         self.deck = self.build_deck()
-        self.dis_pile = []
+        self.discard_pile = []
         self.hands = {name: [] for name in self.players}
 
         for name in self.players:
@@ -180,11 +180,11 @@ class FamilyBlackjackEngine:
                 self.hands[name].append(self.deck.pop())
 
         starter = self.deck.pop()
-        self.dis_pile.append(starter)
+        self.discard_pile.append(starter)
 
         self.active_penalty_type = None
         self.accumulated_penalty = 0
-        self.dec_ace_suit = None
+        self.declared_ace_suit = None
         self.penalty_source = None
 
         self.match_stats = {
@@ -328,10 +328,10 @@ class FamilyBlackjackEngine:
         drawn = []
         for _ in range(count):
             if not self.deck:
-                if len(self.dis_pile) > 1:
-                    top_card = self.dis_pile.pop()
-                    self.deck = self.dis_pile.copy()
-                    self.dis_pile = [top_card]
+                if len(self.discard_pile) > 1:
+                    top_card = self.discard_pile.pop()
+                    self.deck = self.discard_pile.copy()
+                    self.discard_pile = [top_card]
                     msg_txt = (
                         "🔄 The draw pile ran out! The discard pile has "
                         "been flipped."
@@ -437,10 +437,10 @@ class FamilyBlackjackEngine:
                 return False, err_msg, 0
             matched_cards.append(found)
 
-        top_card = self.dis_pile[-1]
-        is_ace_active = self.dec_ace_suit and top_card['value'] == 'Ace'
+        top_card = self.discard_pile[-1]
+        is_ace_active = self.declared_ace_suit and top_card['value'] == 'Ace'
         is_table_queen = top_card['value'] == 'Queen'
-        active_suit = self.dec_ace_suit if is_ace_active else top_card['suit']
+        active_suit = self.declared_ace_suit if is_ace_active else top_card['suit']
         active_val = top_card['value']
 
         # Pre-calculate intended penalty enforcement.
@@ -493,7 +493,7 @@ class FamilyBlackjackEngine:
 
                 is_chain_valid = is_same_rank or is_same_suit or is_ace or is_suit_chain
                 if not is_chain_valid:
-                    return False, "Cards must match rank, suit, be an Ace, or follow a Queen", 0
+                    return False, "Chain invalid: Cards must match rank, suit, be an Ace, or follow a Queen", 0
 
             if card['value'] == '8':
                 eight_skips += 1
@@ -507,11 +507,11 @@ class FamilyBlackjackEngine:
 
         self.active_penalty_type = temp_penalty_type
         self.accumulated_penalty = temp_accumulated
-        self.dec_ace_suit = None
+        self.declared_ace_suit = None
 
         for card in matched_cards:
             player_hand.remove(card)
-            self.dis_pile.append(card)
+            self.discard_pile.append(card)
 
         if name in getattr(self, 'match_stats', {}):
             self.match_stats[name]['cards_played'] += len(matched_cards)
@@ -581,7 +581,7 @@ class FamilyBlackjackEngine:
         if not getattr(self, 'jokers_available', {}).get(name, False):
             return False, "You have already used your Joker."
         if getattr(self, 'joker_cooldown', 0) > 0:
-            return False, f"Joker play is waiting {self.joker_cooldown} more turns."
+            return False, f"Joker is on cooldown for {self.joker_cooldown} more turns."
 
         self.jokers_available[name] = False
         self.direction *= -1
@@ -610,8 +610,8 @@ class FamilyBlackjackEngine:
             else:
                 self.draw_card(current_player, 1, reason='timeout_draw')
 
-            if self.dis_pile and self.dis_pile[-1]['value'] == 'Ace' and not self.dec_ace_suit:
-                self.dec_ace_suit = self.dis_pile[-1]['suit']
+            if self.discard_pile and self.discard_pile[-1]['value'] == 'Ace' and not self.declared_ace_suit:
+                self.declared_ace_suit = self.discard_pile[-1]['suit']
 
             self.advance_turn()
             return {'player': current_player, 'was_penalty': was_penalty, 'amount': penalty_amount}
@@ -739,7 +739,7 @@ def run_bot_logic(expected_bot_name):
     # 2. Decide on a move
     hand = game.hands.get(bot_name, [])
     possible_play = None
-    top_card = game.dis_pile[-1]
+    top_card = game.discard_pile[-1]
 
     # Check for penalty counters specifically
     if game.accumulated_penalty > 0:
@@ -751,8 +751,8 @@ def run_bot_logic(expected_bot_name):
             possible_play = matches
     else:
         # Regular turn logic
-        active_suit = game.dec_ace_suit if (
-            game.dec_ace_suit and top_card['value'] == 'Ace'
+        active_suit = game.declared_ace_suit if (
+            game.declared_ace_suit and top_card['value'] == 'Ace'
         ) else top_card['suit']
         active_val = top_card['value']
 
@@ -809,7 +809,7 @@ def run_bot_logic(expected_bot_name):
                     suits = [c['suit'] for c in new_hand]
                     chosen_suit = max(set(suits), key=suits.count)
 
-                game.dec_ace_suit = chosen_suit
+                game.declared_ace_suit = chosen_suit
                 socketio.emit(
                     'game_log',
                     {
@@ -882,67 +882,100 @@ def handle_add_bot():
     broadcast_state()
 
 
+def _broadcast_match_start():
+    """Helper to broadcast game start events and first card rules."""
+    dealer_name = game.players[game.match_dealer_index]
+    starter_name = game.get_current_player_name()
+
+    socketio.emit(
+        'game_log',
+        {'msg': "🔀 Shuffling the deck..."},
+        room='game_room'
+    )
+    log_msg = (
+        f"🃏 Dealer for this hand is <b>{dealer_name}</b>. "
+        f"Play starts with <b>{starter_name}</b>!"
+    )
+    socketio.emit(
+        'game_log',
+        {'msg': log_msg},
+        room='game_room'
+    )
+    socketio.emit('play_sound', {'type': 'shuffle'}, room='game_room')
+
+    first_card = game.discard_pile[-1]
+    if first_card['value'] == 'Ace':
+        starter_sid = game.name_to_sid.get(starter_name)
+        if starter_sid:
+            socketio.emit('prompt_ace_suit', {}, to=starter_sid)
+        ace_msg = (
+            f"🔮 The first card is an Ace! {starter_name} "
+            "declare the active suit."
+        )
+        socketio.emit(
+            'game_log',
+            {'msg': ace_msg},
+            room='game_room'
+        )
+    elif game.active_penalty_type == '2':
+        two_msg = f"⚠️ The first card is a 2! {starter_name} must counter it or draw +2 cards."
+        socketio.emit(
+            'game_log',
+            {'msg': two_msg},
+            room='game_room'
+        )
+    elif game.active_penalty_type == 'BJ':
+        bj_msg = f"⚠️ Black Jack! {starter_name} must counter or draw +5."
+        socketio.emit(
+            'game_log',
+            {'msg': bj_msg},
+            room='game_room'
+        )
+    elif first_card['value'] == '8':
+        skipped_name = game.players[(game.match_dealer_index + 1) % len(game.players)]
+        eight_msg = (
+            f"The first card is an 8! {skipped_name} misses a turn. "
+            f"Action starts with {starter_name}!"
+        )
+        socketio.emit('game_log', {'msg': eight_msg}, room='game_room')
+
+    broadcast_state()
+    check_for_bot_turn()
+
+
+@socketio.on('start_demo')
+def handle_start_demo():
+    """Launch a demo mode with 3 bots playing against each other."""
+    sid = request.sid
+    requester = game.sid_to_name.get(sid, "Someone")
+    
+    # Clear current players but keep connections (spectator mode)
+    game.players = []
+    
+    possible_names = [
+        "🤖 HAL 9000", "🤖 The Architect", "🤖 KITT", "🤖 V'ger",
+        "🤖 Ash", "🤖 R2-D2", "🤖 C3-PO"
+    ]
+    for bot in random.sample(possible_names, 3):
+        game.add_player(bot)
+        
+    socketio.emit(
+        'game_log',
+        {'msg': f"🎬 {requester} activated Demo Mode! 3 Bots are battling it out!"},
+        room='game_room'
+    )
+    
+    if game.start_game():
+        _broadcast_match_start()
+    else:
+        emit('error', {'msg': 'Failed to start demo mode!'})
+
+
 @socketio.on('start_match')
 def handle_start():
     """Transition state parameters to live round execution modes."""
     if game.start_game():
-        dealer_name = game.players[game.match_dealer_index]
-        starter_name = game.get_current_player_name()
-
-        socketio.emit(
-            'game_log',
-            {'msg': "🔀 Shuffling the deck..."},
-            room='game_room'
-        )
-        log_msg = (
-            f"🃏 Dealer for this hand is <b>{dealer_name}</b>. "
-            f"Play starts with <b>{starter_name}</b>!"
-        )
-        socketio.emit(
-            'game_log',
-            {'msg': log_msg},
-            room='game_room'
-        )
-        socketio.emit('play_sound', {'type': 'shuffle'}, room='game_room')
-
-        first_card = game.dis_pile[-1]
-        if first_card['value'] == 'Ace':
-            starter_sid = game.name_to_sid.get(starter_name)
-            if starter_sid:
-                socketio.emit('prompt_ace_suit', {}, to=starter_sid)
-            ace_msg = (
-                f"🔮 The first card is an Ace! {starter_name} "
-                "declare the active suit."
-            )
-            socketio.emit(
-                'game_log',
-                {'msg': ace_msg},
-                room='game_room'
-            )
-        elif game.active_penalty_type == '2':
-            two_msg = f"⚠️ The first card is a 2! {starter_name} must counter it or draw +2 cards."
-            socketio.emit(
-                'game_log',
-                {'msg': two_msg},
-                room='game_room'
-            )
-        elif game.active_penalty_type == 'BJ':
-            bj_msg = f"⚠️ Black Jack! {starter_name} must counter or draw +5."
-            socketio.emit(
-                'game_log',
-                {'msg': bj_msg},
-                room='game_room'
-            )
-        elif first_card['value'] == '8':
-            skipped_name = game.players[(game.match_dealer_index + 1) % len(game.players)]
-            eight_msg = (
-                f"The first card is an 8! {skipped_name} misses a turn. "
-                f"Action starts with {starter_name}!"
-            )
-            socketio.emit('game_log', {'msg': eight_msg}, room='game_room')
-
-        broadcast_state()
-        check_for_bot_turn()
+        _broadcast_match_start()
     else:
         emit('error', {'msg': 'Need at least 2 players to start!'})
 
@@ -980,7 +1013,7 @@ def handle_play(data):
             game.is_started = False
             game.accumulated_penalty = 0
             game.active_penalty_type = None
-            game.dec_ace_suit = None
+            game.declared_ace_suit = None
             game.penalty_source = None
 
             awards = game.calculate_awards()
@@ -1037,7 +1070,7 @@ def handle_ace_suit(data):
     if not name or name != game.get_current_player_name():
         return
     chosen_suit = data.get('suit')
-    game.dec_ace_suit = chosen_suit
+    game.declared_ace_suit = chosen_suit
 
     socketio.emit(
         'game_log',
@@ -1211,17 +1244,17 @@ def handle_disconnect():
 
 def broadcast_state():
     """Transmit a synchronized payload package containing global configurations."""
-    active_suit = game.dec_ace_suit
-    if not active_suit and game.dis_pile:
-        active_suit = game.dis_pile[-1]['suit']
+    active_suit = game.declared_ace_suit
+    if not active_suit and game.discard_pile:
+        active_suit = game.discard_pile[-1]['suit']
 
     # Determine the top card to display. If the lobby is idle (no game started and no pile),
     # we show a decorative Ace of Spades placeholder.
-    if not game.dis_pile and not game.is_started:
+    if not game.discard_pile and not game.is_started:
         top_card = {'suit': 'Spades', 'value': 'Ace'}
         active_suit = 'Spades'
     else:
-        top_card = game.dis_pile[-1] if game.dis_pile else None
+        top_card = game.discard_pile[-1] if game.discard_pile else None
 
     scoreboards = []
     for u_name in game.league_wins:

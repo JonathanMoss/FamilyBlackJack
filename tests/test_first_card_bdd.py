@@ -123,7 +123,7 @@ def start_game(lobby_with_two_players, first_card, monkeypatch):
         # Remove the card we want to start with from the generated deck.
         available = [card for card in all_cards if card != first_card]
         
-        # Ensure Bob (index 49) has a counter if the starter is a penalty card
+        # Ensure Bob (who gets index 50 after insertion) has a counter if the starter is a penalty card
         # so the penalty isn't auto-resolved during start_game().
         if first_card['value'] == '2':
             available[49] = {'suit': 'Hearts', 'value': '2'}

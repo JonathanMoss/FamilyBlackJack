@@ -554,9 +554,10 @@ def test_bot_logic_plays_penalty_chain():
     assert game.accumulated_penalty == 6
     assert game.active_penalty_type == '2'
 
-def test_play_joker_reverses_direction_and_sets_cooldown():
+def test_play_joker_reverses_direction_and_sets_cooldown(monkeypatch):
     game = FamilyBlackjackEngine()
     game.players = ['Alice', 'Bob', 'Charlie']
+    monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: [{'suit': 'Spades', 'value': '3'}] * 52)
     game.start_game()
     game.current_turn_index = 0  # Alice
     
