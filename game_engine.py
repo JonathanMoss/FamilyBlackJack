@@ -13,7 +13,6 @@ BOT_ROSTER = [
 ]
 
 
-# pylint: disable=too-many-instance-attributes
 class FamilyBlackjackEngine:
     """Core state machine managing players, card decks, and gameplay rounds."""
 
@@ -28,7 +27,7 @@ class FamilyBlackjackEngine:
         self.current_turn_index = 0
         self.direction = 1
         self.is_started = False
-        
+
         self.turn_timeout = turn_timeout
         self.host_name = None
 
@@ -51,7 +50,7 @@ class FamilyBlackjackEngine:
         self.avatars = {}
         self.jokers_available = {}
         self.joker_cooldown = 0
-        
+
         self.socketio = None
 
     def set_socketio(self, socketio_instance):
@@ -243,7 +242,6 @@ class FamilyBlackjackEngine:
             self.advance_turn(steps=1)
             return True
 
-        self.check_and_enforce_autodraw()
         return True
 
     def get_current_player_name(self):
@@ -434,7 +432,7 @@ class FamilyBlackjackEngine:
 
         return new_type, new_accumulated, new_source
 
-    # pylint: disable=too-many-locals,too-many-return-statements,too-many-branches,too-many-statements
+    # pylint: disable=too-many-return-statements
     def validate_and_play_move(self, name, selected_cards):
         """Process legal game plays against rules and active penalties.
 
@@ -523,7 +521,11 @@ class FamilyBlackjackEngine:
 
                 is_chain_valid = is_same_rank or is_same_suit or is_ace or is_suit_chain
                 if not is_chain_valid:
-                    return False, "Chain invalid: Cards must match rank, suit, be an Ace, or follow a Queen", 0
+                    return (
+                        False,
+                        "Chain invalid: Cards must match rank, suit, be an Ace, or follow a Queen",
+                        0
+                    )
 
             if card['value'] == '8':
                 eight_skips += 1

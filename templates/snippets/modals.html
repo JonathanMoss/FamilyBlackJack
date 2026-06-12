@@ -1,0 +1,51 @@
+<div id="avatar-modal" class="generic-modal" style="display: none;">
+    <div class="modal-content">
+        <h3 style="margin-top:0;">Select Avatar</h3>
+        <div class="avatar-grid">
+            {% for a in avatars %}
+            <div class="avatar-option" onclick="selectAvatar('{{ a }}')">{{ a }}</div>
+            {% endfor %}
+        </div>
+        <button onclick="document.getElementById('avatar-modal').style.display='none'">Close</button>
+    </div>
+</div>
+
+<div id="ace-modal" class="generic-modal" style="display:none;">
+    <div class="modal-content">
+        <h2 style="color: #ffeb3b; margin-top: 0; font-size: 1.4rem;">🔮 Ace Played! Choose Suit:</h2>
+        <button id="ace-hearts-btn" style="background:#d9534f; color:white;">♥ Hearts</button>
+        <button id="ace-diamonds-btn" style="background:#f0ad4e; color:white;">♦ Diamonds</button>
+        <button id="ace-clubs-btn" style="background:#292b2c; color:white;">♣ Clubs</button>
+        <button id="ace-spades-btn" style="background:#0275d8; color:white;">♠ Spades</button>
+    </div>
+</div>
+
+<div id="game-over-modal" class="generic-modal" style="display:none;">
+    <div class="modal-content" style="border-color: #e0a800;">
+        <h1 style="color: #ffeb3b; margin-top: 0; font-size: 24px;">🏆 MATCH OVER! 🏆</h1>
+        <div id="game-over-text" style="font-size: 16px; margin: 15px 0; font-weight: bold;"></div>
+        <button id="close-game-over-btn" style="width:100%;">Back to Game!</button>
+    </div>
+</div>
+
+<div id="confirm-logout-modal" class="generic-modal" style="display:none;">
+    <div class="modal-content">
+        <h3 style="margin-top:0;">Logout?</h3>
+        <p>Are you sure you want to log out and leave the table?</p>
+        <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px;">
+            <button id="confirm-logout-btn" style="background-color: #dc3545;">Logout</button>
+            <button id="cancel-logout-btn" style="background-color: #6c757d;">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="confirm-reset-modal" class="generic-modal" style="display:none;">
+    <div class="modal-content">
+        <h3 style="margin-top:0;">Stop Match?</h3>
+        <p>Are you sure you want to stop the current match and return all players to the lobby?</p>
+        <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px;">
+            <button id="confirm-reset-action-btn" style="background-color: #dc3545;">Stop Match</button>
+            <button id="cancel-reset-btn" style="background-color: #6c757d;">Cancel</button>
+        </div>
+    </div>
+</div>

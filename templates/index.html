@@ -25,34 +25,16 @@
     <div id="toast-notification"></div>
 
     <h1>♠ Family Black Jack ♣
-        <button id="logout-btn" onclick="logout()" style="display:none; font-size:12px; float:right; background:#b02a37; color:white; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Logout</button>
-        <button id="reset-btn" onclick="resetGame()" style="display:none; font-size:12px; float:right; background:#b02a37; color:white; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Stop Game</button>
+        <button id="logout-btn" style="display:none; font-size:12px; float:right; background:#b02a37; color:white; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Logout</button>
+        <button id="reset-btn" style="display:none; font-size:12px; float:right; background:#b02a37; color:white; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Stop Game</button>
     </h1>
     
     <div id="setup-panel">
         <input type="text" id="username" placeholder="Enter Your Name">
-        <button onclick="joinGame()">Join Table</button>
+        <button id="join-btn">Join Table</button>
     </div>
 
-    <div id="ace-modal" class="generic-modal">
-        <div class="modal-content">
-            <h2 style="color: #ffeb3b; margin-top: 0; font-size: 1.4rem;">🔮 Ace Played! Choose Suit:</h2>
-            <button onclick="selectAceSuit('Hearts')" style="background:#d9534f; color:white;">♥ Hearts</button>
-            <button onclick="selectAceSuit('Diamonds')" style="background:#f0ad4e; color:white;">♦ Diamonds</button>
-            <button onclick="selectAceSuit('Clubs')" style="background:#292b2c; color:white;">♣ Clubs</button>
-            <button onclick="selectAceSuit('Spades')" style="background:#0275d8; color:white;">♠ Spades</button>
-        </div>
-    </div>
-
-    <div id="game-over-modal" class="generic-modal">
-        <div class="modal-content" style="border-color: #e0a800;">
-            <h1 style="color: #ffeb3b; margin-top: 0; font-size: 24px;">🏆 MATCH OVER! 🏆</h1>
-            <p id="game-over-text" style="font-size: 16px; margin: 15px 0; font-weight: bold;"></p>
-            <button onclick="closeGameOverModal()" style="width:100%;">Back to Game!</button>
-        </div>
-    </div>
-
-    <div id="personal-penalty-alert">
+    <div id="personal-penalty-alert" style="display:none;">
         <h3 style="margin: 0 0 5px 0;">🚨 INCOMING PENALTY ATTACK! 🚨</h3>
         <p id="penalty-alert-text" style="font-size: 15px; margin: 0;"></p>
     </div>
@@ -87,9 +69,10 @@
     <div id="player-list-box"></div>
     
     <div class="lobby-actions" id="lobby-controls">
-        <button onclick="startGame()" style="width: 100%; margin: 4px 0;">Start Game</button>
-        <button onclick="startDemo()" id="start-demo-btn" style="width: 100%; margin: 4px 0; background: #17a2b8; color: white;">🤖 Demo 🤖</button>
-        <button onclick="stopDemo()" id="stop-demo-btn" style="width: 100%; margin: 4px 0; background: #fd7e14; color: white; display: none;">🤖 Finish Demo 🤖</button>
+        <button id="start-game-btn" style="width: 100%; margin: 4px 0;">Start Game</button>
+        <button id="shuffle-players-btn" style="width: 100%; margin: 4px 0; background: #6f42c1; color: white;">🔀 Shuffle Players 🔀</button>
+        <button id="start-demo-btn" style="width: 100%; margin: 4px 0; background: #17a2b8; color: white;">🤖 Demo 🤖</button>
+        <button id="stop-demo-btn" style="width: 100%; margin: 4px 0; background: #fd7e14; color: white; display: none;">🤖 Finish Demo 🤖</button>
     </div>
 </div>
 
@@ -107,23 +90,23 @@
             <h3 class="panel-heading" style="margin: 5px 0;">Your Hand</h3>
             
             <div style="margin-bottom: 8px;">
-                <button type="button" onclick="organizeHand('shuffle')" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Randomise Hand</button>
-                <button type="button" onclick="organizeHand('sort')" style="background: #2b5c8f; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">📊 Sort Hand</button>
+                <button id="shuffle-hand-btn" type="button" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Randomise Hand</button>
+                <button id="sort-hand-btn" type="button" style="background: #2b5c8f; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">📊 Sort Hand</button>
             </div>
 
             <div id="my-hand"></div>
             
             <div style="margin-top: 5px;">
-                <button onclick="playSelected()" id="play-btn" disabled>Play Card(s)</button>
-                <button onclick="drawOrResolve()" id="action-draw-btn">Draw Card</button>
+                <button id="play-btn" disabled>Play Card(s)</button>
+                <button id="action-draw-btn">Draw Card</button>
             </div>
             
             <div id="queen-actions" style="display:none; margin-top: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
                 <p style="color: #ffeb3b; font-weight: bold; margin: 0 0 5px 0; font-size: 14px;">👑 Queen Cascade Dump Suit:</p>
-                <button onclick="cascade('Hearts')" style="padding: 6px 12px; font-size: 13px;">♥</button>
-                <button onclick="cascade('Diamonds')" style="padding: 6px 12px; font-size: 13px;">♦</button>
-                <button onclick="cascade('Clubs')" style="padding: 6px 12px; font-size: 13px;">♣</button>
-                <button onclick="cascade('Spades')" style="padding: 6px 12px; font-size: 13px;">♠</button>
+                <button id="cascade-hearts-btn" style="padding: 6px 12px; font-size: 13px;">♥</button>
+                <button id="cascade-diamonds-btn" style="padding: 6px 12px; font-size: 13px;">♦</button>
+                <button id="cascade-clubs-btn" style="padding: 6px 12px; font-size: 13px;">♣</button>
+                <button id="cascade-spades-btn" style="padding: 6px 12px; font-size: 13px;">♠</button>
             </div>
         </div>
 

@@ -23,6 +23,12 @@ if 'flask' not in sys.modules:
                 return fn
             return decorator
 
+        def app_context(self):
+            class AppContextStub:
+                def __enter__(self): return self
+                def __exit__(self, *args): pass
+            return AppContextStub()
+
     flask_stub = types.ModuleType('flask')
     flask_stub.Flask = FlaskStub
     flask_stub.render_template = lambda *args, **kwargs: ''
@@ -180,6 +186,47 @@ def test_start_game_with_first_card_black_jack_applies_initial_bj_penalty(monkey
     assert game.discard_pile[-1] == {'suit': 'Spades', 'value': 'Jack'}
     assert game.active_penalty_type == 'BJ'
     assert game.accumulated_penalty == 5
+
+
+def test_first_card_penalty_does_not_skip_intended_starter_during_start(monkeypatch):
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+
+    fixed_deck = build_fixed_deck([
+        {'suit': 'Spades', 'value': '2'},    # Deck
+        {'suit': 'Spades', 'value': '3'},    # Deck
+        {'suit': 'Diamonds', 'value': '2'},  # Starter card
+        {'suit': 'Clubs', 'value': '3'},     # Bob
+        {'suit': 'Hearts', 'value': '4'},    # Alice
+        {'suit': 'Spades', 'value': '5'},    # Bob
+        {'suit': 'Hearts', 'value': '6'},    # Alice
+        {'suit': 'Clubs', 'value': '7'},     # Bob
+        {'suit': 'Diamonds', 'value': '8'},  # Alice
+        {'suit': 'Spades', 'value': '9'},    # Bob
+        {'suit': 'Hearts', 'value': '10'},   # Alice
+        {'suit': 'Clubs', 'value': 'Jack'},  # Bob
+        {'suit': 'Diamonds', 'value': 'Queen'}, # Alice
+        {'suit': 'Spades', 'value': 'King'}, # Bob
+        {'suit': 'Hearts', 'value': 'Ace'},  # Alice
+        {'suit': 'Clubs', 'value': '4'},     # Bob
+        {'suit': 'Diamonds', 'value': '4'},  # Alice
+    ])
+    monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: fixed_deck)
+
+    game.start_game()
+
+    assert game.accumulated_penalty == 2
+    # The dealer is Alice (0), the intended starter is Bob (1).
+    assert game.current_turn_index == 1
+    assert game.get_current_player_name() == 'Bob'
+    # Bob should not have auto-drawn yet during start_game
+    assert len(game.hands['Bob']) == 7
+
+    game.check_and_enforce_autodraw()
+    assert len(game.hands['Bob']) == 9
+    assert game.accumulated_penalty == 0
+    assert game.current_turn_index == 0
+    assert game.get_current_player_name() == 'Alice'
 
 
 def test_validate_and_play_move_allows_ace_as_first_card(monkeypatch):
@@ -741,6 +788,43 @@ def test_handle_add_bot_generates_unique_names(monkeypatch):
     assert 'Maximum of 3 bots allowed.' in emitted[0][1]['msg']
     assert len(game.players) == 4
 
+
+def test_handle_shuffle_players_reverses_order(monkeypatch):
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob', 'Charlie']
+    game.sid_to_name = {'fake_sid': 'Alice'}
+    
+    app.game = game
+    monkeypatch.setattr(app.request, 'sid', 'fake_sid')
+    # Mock shuffle to reverse order deterministically
+    monkeypatch.setattr(app.random, 'shuffle', lambda lst: lst.reverse())
+    
+    app.handle_shuffle_players()
+    assert game.players == ['Charlie', 'Bob', 'Alice']
+
+
+def test_handle_shuffle_players_fails_if_started(monkeypatch):
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob', 'Charlie']
+    game.is_started = True
+    game.sid_to_name = {'fake_sid': 'Alice'}
+    
+    app.game = game
+    monkeypatch.setattr(app.request, 'sid', 'fake_sid')
+    
+    emitted = []
+    monkeypatch.setattr(app, 'emit', lambda event, data: emitted.append((event, data)))
+    
+    app.handle_shuffle_players()
+    
+    assert game.players == ['Alice', 'Bob', 'Charlie']
+    assert len(emitted) == 1
+    assert emitted[0][0] == 'error'
+    assert 'Cannot shuffle players while a match is in progress' in emitted[0][1]['msg']
 
 def test_bot_logic_draws_fallback_if_play_fails(monkeypatch):
     import app

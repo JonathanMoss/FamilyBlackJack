@@ -1,0 +1,25 @@
+<h2>Winner: {{ winner }}!</h2>
+{% if awards %}
+<div class="awards-section" style="margin-top: 20px; font-size: 0.9em; text-align: left; background: rgba(0,0,0,0.1); padding: 15px; border-radius: 8px;">
+    <h3 style="margin-top: 0; text-align: center;">🏆 Fun Awards 🏆</h3>
+    {% if awards.least_cards %}
+    <div style="margin-bottom: 8px;">🃏 <b>Minimalist:</b> {{ awards.least_cards.name }} played the fewest cards ({{ awards.least_cards.value }})</div>
+    {% endif %}
+    {% if awards.quickest %}
+    <div style="margin-bottom: 8px;">⚡ <b>Speedster:</b> {{ awards.quickest.name }} averaged {{ awards.quickest.value }}s per turn</div>
+    {% endif %}
+    {% if awards.most_nudges %}
+    <div style="margin-bottom: 8px;">🚨 <b>Impatient:</b> {{ awards.most_nudges.name }} sent the most nudges ({{ awards.most_nudges.value }})</div>
+    {% endif %}
+    {% if awards.most_penalties %}
+    <div style="margin-bottom: 8px;">🎯 <b>Target Practice:</b> {{ awards.most_penalties.name }} drew the most penalty cards ({{ awards.most_penalties.value }})</div>
+    {% endif %}
+    {% if awards.most_power %}
+    <div style="margin-bottom: 8px;">🔥 <b>Power Player:</b> {{ awards.most_power.name }} dropped the most power cards ({{ awards.most_power.value }})</div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if is_demo %}
+<div style="margin-top: 15px; color: #17a2b8; font-weight: bold; text-align: center;">Starting new demo game in 10 seconds...</div>
+{% endif %}

@@ -23,6 +23,13 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 game = FamilyBlackjackEngine()
 game.set_socketio(socketio)
 
+# Fallback for test environments using outdated FlaskStubs
+if not hasattr(app, 'app_context'):
+    class DummyAppContext:
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc_val, exc_tb): pass
+    app.app_context = lambda: DummyAppContext()
+
 
 @app.route('/')
 def index():
@@ -39,6 +46,16 @@ def logout():
     """Clear session cookie and redirect to index."""
     session.clear()
     return redirect(url_for('index'))
+
+
+@app.route('/snippets/modals')
+def modals_snippet():
+    """Serve HTML snippet for static modals."""
+    avatars = [
+        '👤', '😎', '🤠', '👽', '👾', '🐱', '🐶', '🦊', '🐻', '🐼',
+        '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🦇', '🦉', '🦄'
+    ]
+    return render_template('snippets/modals.html', avatars=avatars)
 
 
 @socketio.on('join_game')
@@ -185,7 +202,7 @@ def run_bot_logic(expected_bot_name):
                 'game_log', {
                     'msg': f"📝 {bot_name} played : {cards_desc}"}, room='game_room'
             )
-            
+
             socketio.emit('play_sound', {'type': 'play'}, room='game_room')
 
             if len(game.hands.get(bot_name, [])) == 0:
@@ -199,8 +216,17 @@ def run_bot_logic(expected_bot_name):
                 game.host_name = None
 
                 awards = game.calculate_awards()
+                is_demo = all(p.startswith('🤖') for p in game.players)
+                try:
+                    with app.app_context():
+                        html_content = render_template('snippets/game_over.html', winner=bot_name, awards=awards, is_demo=is_demo)
+                except Exception:
+                    html_content = f"<h2>Winner: {bot_name}!</h2><p>Game Over!</p>"
+
                 game.clear_bots_if_humans()
-                socketio.emit('game_over', {'winner': bot_name, 'awards': awards}, room='game_room')
+                socketio.emit(
+                    'game_over', {'html': html_content, 'is_demo': is_demo, 'winner': bot_name}, room='game_room'
+                )
                 socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
                 broadcast_state()
                 return
@@ -299,10 +325,55 @@ def handle_add_bot():
     broadcast_state()
 
 
+@socketio.on('shuffle_players')
+def handle_shuffle_players():
+    """Randomize the order of players in the lobby."""
+    sid = request.sid
+    requester = game.sid_to_name.get(sid)
+    if not requester:
+        return emit('error', {'msg': 'You must be in the lobby to shuffle players.'})
+
+    if game.is_started:
+        return emit('error', {'msg': 'Cannot shuffle players while a match is in progress.'})
+
+    if len(game.players) > 1:
+        random.shuffle(game.players)
+        socketio.emit(
+            'game_log',
+            {'msg': f"🔀 {requester} shuffled the player order!"},
+            room='game_room'
+        )
+        broadcast_state()
+
+
+@socketio.on('remove_bot')
+def handle_remove_bot(data):
+    """Remove a specific bot from the lobby."""
+    sid = request.sid
+    requester = game.sid_to_name.get(sid)
+    if not requester:
+        return emit('error', {'msg': 'You must be in the lobby to remove a bot.'})
+
+    if game.is_started:
+        return emit('error', {'msg': 'Cannot remove bots while a match is in progress.'})
+
+    bot_name = data.get('name')
+    if bot_name and bot_name in game.players and bot_name.startswith('🤖'):
+        game.players.remove(bot_name)
+        if bot_name in game.hands:
+            del game.hands[bot_name]
+        socketio.emit(
+            'game_log',
+            {'msg': f"🤖 {requester} removed {bot_name}."},
+            room='game_room'
+        )
+        broadcast_state()
+
+
 def _broadcast_match_start():
     """Helper to broadcast game start events and first card rules."""
     dealer_name = game.players[game.match_dealer_index]
-    starter_name = game.get_current_player_name()
+    intended_starter_name = game.players[(game.match_dealer_index + 1) % len(game.players)]
 
     socketio.emit(
         'game_log',
@@ -311,7 +382,7 @@ def _broadcast_match_start():
     )
     log_msg = (
         f"🃏 Dealer for this hand is <b>{dealer_name}</b>. "
-        f"Play starts with <b>{starter_name}</b>!"
+        f"Play starts with <b>{intended_starter_name}</b>!"
     )
     socketio.emit(
         'game_log',
@@ -322,11 +393,11 @@ def _broadcast_match_start():
 
     first_card = game.discard_pile[-1]
     if first_card['value'] == 'Ace':
-        starter_sid = game.name_to_sid.get(starter_name)
+        starter_sid = game.name_to_sid.get(intended_starter_name)
         if starter_sid:
             socketio.emit('prompt_ace_suit', {}, to=starter_sid)
         ace_msg = (
-            f"🔮 The first card is an Ace! {starter_name} "
+            f"🔮 The first card is an Ace! {intended_starter_name} "
             "declare the active suit."
         )
         socketio.emit(
@@ -335,14 +406,14 @@ def _broadcast_match_start():
             room='game_room'
         )
     elif game.active_penalty_type == '2':
-        two_msg = f"⚠️ The first card is a 2! {starter_name} must counter it or draw +2 cards."
+        two_msg = f"⚠️ The first card is a 2! {intended_starter_name} must counter it or draw +2 cards."
         socketio.emit(
             'game_log',
             {'msg': two_msg},
             room='game_room'
         )
     elif game.active_penalty_type == 'BJ':
-        bj_msg = f"⚠️ Black Jack! {starter_name} must counter or draw +5."
+        bj_msg = f"⚠️ Black Jack! {intended_starter_name} must counter or draw +5."
         socketio.emit(
             'game_log',
             {'msg': bj_msg},
@@ -350,13 +421,21 @@ def _broadcast_match_start():
         )
     elif first_card['value'] == '8':
         skipped_name = game.players[(game.match_dealer_index + 1) % len(game.players)]
+        actual_starter = game.get_current_player_name()
         eight_msg = (
             f"The first card is an 8! {skipped_name} misses a turn. "
-            f"Action starts with {starter_name}!"
+            f"Action starts with {actual_starter}!"
         )
         socketio.emit('game_log', {'msg': eight_msg}, room='game_room')
 
     broadcast_state()
+
+    # Enforce any immediate auto-draws from penalty start cards so the logs appear chronologically
+    prev_penalty = game.accumulated_penalty
+    game.check_and_enforce_autodraw()
+    if prev_penalty > 0 and game.accumulated_penalty == 0:
+        broadcast_state()
+
     check_for_bot_turn()
 
 
@@ -365,23 +444,23 @@ def handle_start_demo():
     """Launch a demo mode with 3 bots playing against each other."""
     sid = request.sid
     requester = game.sid_to_name.get(sid, "Someone")
-    
+
     # Store currently connected humans
     connected_humans = list(game.sid_to_name.values())
 
     # Clear current players but keep connections (spectator mode)
     game.players = []
     game.host_name = None
-    
+
     for bot in random.sample(BOT_ROSTER, 3):
         game.add_player(bot)
-        
+    
     socketio.emit(
         'game_log',
         {'msg': f"🎬 {requester} activated Demo Mode! 3 Bots are battling it out!"},
         room='game_room'
     )
-    
+
     if game.start_game():
         for human in connected_humans:
             game.add_player(human)
@@ -477,10 +556,16 @@ def handle_play(data):
             game.penalty_source = None
 
             awards = game.calculate_awards()
+            is_demo = all(p.startswith('🤖') for p in game.players)
+            try:
+                with app.app_context():
+                    html_content = render_template('snippets/game_over.html', winner=name, awards=awards, is_demo=is_demo)
+            except Exception:
+                html_content = f"<h2>Winner: {name}!</h2><p>Game Over!</p>"
+
             game.clear_bots_if_humans()
             socketio.emit(
-                'game_over',
-                {'winner': name, 'awards': awards},
+                'game_over', {'html': html_content, 'is_demo': is_demo, 'winner': name},
                 room='game_room'
             )
             socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
@@ -745,6 +830,12 @@ def broadcast_state():
         game.name_to_sid.get(current_player) if current_player else None
     )
 
+    try:
+        with app.app_context():
+            league_html = render_template('snippets/league_table.html', league_table=scoreboards)
+    except Exception:
+        league_html = "<tr><td colspan='3'>Scoreboard offline.</td></tr>"
+
     state = {
         'is_started': game.is_started,
         'host_name': getattr(game, 'host_name', None),
@@ -764,7 +855,8 @@ def broadcast_state():
         },
         'league_table': scoreboards,
         'turn_start_time': game.current_turn_start_time,
-        'server_time': time.time()
+        'server_time': time.time(),
+        'league_html': league_html
     }
     socketio.emit('state_update', state, room='game_room')
 

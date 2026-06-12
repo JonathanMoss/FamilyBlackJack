@@ -16,6 +16,11 @@ if 'flask' not in sys.modules:
             def decorator(fn):
                 return fn
             return decorator
+        def app_context(self):
+            class AppContextStub:
+                def __enter__(self): return self
+                def __exit__(self, *args): pass
+            return AppContextStub()
 
     flask_stub = types.ModuleType('flask')
     flask_stub.Flask = FlaskStub

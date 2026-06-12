@@ -6,18 +6,21 @@ let lastPenalized = { name: null, amount: 0 };
 let spectatorHandsData = null;
 let isDemoMode = false;
 
-// Available avatar selections
-const AVATARS = [
-    '👤', '😎', '🤠', '👽', '👾', '🐱', '🐶', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🦇', '🦉', '🦄'
-];
-
 // Web Audio API context for synthesized game sounds
 let audioCtx = null;
 function initAudio() {
-    if (!audioCtx) {
+    if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
 }
+
+// Unlock audio context on the first user interaction to ensure autoplay policies are satisfied
+document.addEventListener('click', () => {
+    initAudio();
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}, { once: true });
 
 // Custom sorting rules to respect your layout sequence: 2-10, Ace, Queen, King, Jack
 const RANK_HIERARCHY = {
@@ -111,24 +114,17 @@ function buildCardElement(card) {
 function updateBadges(container) {
     const cardsInDOM = container.getElementsByClassName('card');
     
-    // Reset all badges
-    for(let element of cardsInDOM) {
+    for (let element of cardsInDOM) {
         const badge = element.querySelector('.badge');
-        if (badge) badge.innerText = '';
-    }
-
-    selectedCards.forEach((sc, idx) => {
-        for(let element of cardsInDOM) {
-            // Match via dataset attributes instead of scraping text
-            if(element.dataset.value === sc.value && element.dataset.suit === sc.suit) {
-                if(element.classList.contains('selected')) {
-                    const badge = element.querySelector('.badge');
-                    if (badge) badge.innerText = idx + 1;
-                    break;
-                }
-            }
+        if (!badge) continue;
+        
+        if (element.classList.contains('selected')) {
+            const idx = selectedCards.findIndex(sc => sc.value === element.dataset.value && sc.suit === element.dataset.suit);
+            badge.innerText = idx !== -1 ? idx + 1 : '';
+        } else {
+            badge.innerText = '';
         }
-    });
+    }
 }
 
 function playSelected() {
@@ -150,7 +146,8 @@ function triggerNudge(targetPlayer) {
 }
 
 function evaluateButtonAbilities() {
-    const isMyTurn = (globalState.current_player === document.getElementById('username').value.trim());
+    const clientName = document.getElementById('username').value.trim();
+    const isMyTurn = (globalState.current_player === clientName);
     document.getElementById('play-btn').disabled = !isMyTurn || selectedCards.length === 0;
     
     const drawBtn = document.getElementById('action-draw-btn');
@@ -176,7 +173,6 @@ function evaluateButtonAbilities() {
     }
     
     // Evaluate the Joker status and cooldown states
-    const clientName = document.getElementById('username').value.trim();
     const hasJoker = globalState.jokers_available && globalState.jokers_available[clientName];
     const cooldown = globalState.joker_cooldown || 0;
     
@@ -253,27 +249,31 @@ socket.on('state_update', (state) => {
             document.getElementById('lobby-controls').appendChild(addBotBtn);
         }
 
-        let startGameBtn = document.querySelector('button[onclick="startGame()"]');
+        let startGameBtn = document.getElementById('start-game-btn');
+        let shufflePlayersBtn = document.getElementById('shuffle-players-btn');
         if (isDemoMode) {
             if (startGameBtn) startGameBtn.style.display = 'none';
             if (addBotBtn) addBotBtn.style.display = 'none';
+            if (shufflePlayersBtn) shufflePlayersBtn.style.display = 'none';
         } else {
             if (startGameBtn) startGameBtn.style.display = 'inline-block';
             if (addBotBtn) addBotBtn.style.display = 'inline-block';
+            if (shufflePlayersBtn) shufflePlayersBtn.style.display = 'inline-block';
         }
     } else {
         document.getElementById('lobby-controls').style.display = 'none';
     }
 
-    let resetBtn = document.querySelector('button[onclick="resetGame()"]');
+    let resetBtn = document.getElementById('reset-btn');
     let stopDemoBtn = document.getElementById('stop-demo-btn');
     
     // If the reset button doesn't exist, or is trapped inside the hidden lobby-controls container, dynamically inject/move it!
     if (!resetBtn || (resetBtn.parentElement && resetBtn.parentElement.id === 'lobby-controls')) {
         if (!resetBtn) {
             resetBtn = document.createElement('button');
+            resetBtn.id = 'reset-btn';
             resetBtn.innerText = 'Stop Game';
-            resetBtn.setAttribute('onclick', 'resetGame()');
+            resetBtn.onclick = resetGame;
         }
         const logoutBtn = document.getElementById('logout-btn');
         if (logoutBtn && logoutBtn.parentElement) {
@@ -293,17 +293,11 @@ socket.on('state_update', (state) => {
     }
 
     if (resetBtn) {
-        if (state.is_started && !isDemoMode) {
+        if (state.is_started && !isDemoMode && state.host_name === clientName) {
             resetBtn.style.display = 'inline-block';
-            if (state.host_name === clientName) {
-                resetBtn.disabled = false;
-                resetBtn.style.opacity = '1';
-                resetBtn.style.cursor = 'pointer';
-            } else {
-                resetBtn.disabled = true;
-                resetBtn.style.opacity = '0.5';
-                resetBtn.style.cursor = 'not-allowed';
-            }
+            resetBtn.disabled = false;
+            resetBtn.style.opacity = '1';
+            resetBtn.style.cursor = 'pointer';
         } else {
             resetBtn.style.display = 'none';
         }
@@ -449,6 +443,7 @@ socket.on('state_update', (state) => {
 
         const isLast = state.is_started && cardCount === 1;
         const lastIcon = isLast ? `<span class="last-card-icon" title="Last Card">🔥</span>` : '';
+        const hostIcon = (p === state.host_name) ? `<span title="Host" style="margin-right: 5px;">👑</span>` : '';
 
         const rightControls = (p !== clientName && state.is_started) ? `<button class="nudge-btn" onclick="triggerNudge('${p}')">⏰</button>` : '';
 
@@ -460,13 +455,19 @@ socket.on('state_update', (state) => {
 
         const avatar = (state.avatars && state.avatars[p]) ? state.avatars[p] : (p.startsWith('🤖') ? '🤖' : '👤');
         const isMe = p === clientName;
-        const avatarCursor = isMe ? 'style="cursor:pointer;" title="Click to change avatar" onclick="showAvatarModal()"' : '';
-        const avatarHtml = `<span class="player-avatar" ${avatarCursor}>${avatar}</span>`;
+        const isBot = p.startsWith('🤖');
+        let avatarCursor = 'class="player-avatar"';
+        if (isMe) {
+            avatarCursor = 'style="cursor:pointer;" title="Click to change avatar" class="player-avatar interactive-avatar"';
+        } else if (isBot && !state.is_started && !isDemoMode) {
+            avatarCursor = 'style="cursor:pointer;" title="Click to remove bot" class="player-avatar removable-bot"';
+        }
+        const avatarHtml = `<span ${avatarCursor}>${avatar}</span>`;
 
         row.dataset.name = p;
         row.innerHTML = `
             <div class="player-meta">
-                <span>${avatarHtml} ${pLabel} ${state.is_started ? statusText : '⏳ Ready'} ${lastIcon} ${penaltyIcon}</span>
+                <span>${avatarHtml} ${pLabel} ${hostIcon} ${state.is_started ? statusText : '⏳ Ready'} ${lastIcon} ${penaltyIcon}</span>
                 ${rightControls}
             </div>
             <div class="spectator-hand-tray" style="display:none;"></div>
@@ -493,15 +494,8 @@ socket.on('state_update', (state) => {
 
     // Refresh Global Career Scoreboard Metrics
     const tbody = document.getElementById('league-rows');
-    tbody.innerHTML = '';
-    if(!state.league_table || state.league_table.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3" style="color:#aaa;">No records found.</td></tr>`;
-    } else {
-        state.league_table.forEach(entry => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${entry.name}</td><td style="color:#28a745; font-weight:bold;">${entry.wins}</td><td style="color:#dc3545;">${entry.losses}</td>`;
-            tbody.appendChild(tr);
-        });
+    if (tbody && state.league_html) {
+        tbody.innerHTML = state.league_html;
     }
 
     // Clear spectator data if we are actively playing
@@ -545,47 +539,6 @@ function renderSpectatorHands() {
     }
 }
 
-function createAvatarModal() {
-    if (document.getElementById('avatar-modal')) return;
-    const modal = document.createElement('div');
-    modal.id = 'avatar-modal';
-    modal.className = 'generic-modal';
-    let gridHtml = '<div class="avatar-grid">';
-    AVATARS.forEach(a => {
-        gridHtml += `<div class="avatar-option" onclick="selectAvatar('${a}')">${a}</div>`;
-    });
-    gridHtml += '</div>';
-    modal.innerHTML = `
-        <div class="modal-content">
-            <h3 style="margin-top:0;">Select Avatar</h3>
-            ${gridHtml}
-            <button onclick="document.getElementById('avatar-modal').style.display='none'">Close</button>
-        </div>
-    `;
-    document.body.appendChild(modal);
-}
-createAvatarModal();
-
-function createConfirmResetModal() {
-    if (document.getElementById('confirm-reset-modal')) return;
-    const modal = document.createElement('div');
-    modal.id = 'confirm-reset-modal';
-    modal.className = 'generic-modal';
-    modal.style.display = 'none';
-    modal.innerHTML = `
-        <div class="modal-content">
-            <h3 style="margin-top:0;">Stop Match?</h3>
-            <p>Are you sure you want to stop the current match and return all players to the lobby?</p>
-            <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px;">
-                <button onclick="confirmResetGame()" style="background-color: #dc3545;">Stop Match</button>
-                <button onclick="document.getElementById('confirm-reset-modal').style.display='none'" style="background-color: #6c757d;">Cancel</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-}
-createConfirmResetModal();
-
 socket.on('prompt_ace_suit', () => {
     document.getElementById('ace-modal').style.display = 'flex';
 });
@@ -599,51 +552,31 @@ socket.on('joker_played', (data) => {
 
 socket.on('game_log', (data) => {
     const logBox = document.getElementById('game-log-box');
-    logBox.innerHTML += `<div>${data.msg}</div>`;
+    logBox.insertAdjacentHTML('beforeend', `<div>${data.msg}</div>`);
     logBox.scrollTop = logBox.scrollHeight;
 });
 
 socket.on('game_over', (data) => {
     soundEffect('winner');
 
-    const isDemoGame = globalState.player_list && globalState.player_list.length > 0 && globalState.player_list.every(p => p.startsWith('🤖'));
+    document.getElementById('game-over-text').innerHTML = data.html;
 
-    let content = `<h2>Winner: ${data.winner}!</h2>`;
-    if (data.awards) {
-        content += `<div class="awards-section" style="margin-top: 20px; font-size: 0.9em; text-align: left; background: rgba(0,0,0,0.1); padding: 15px; border-radius: 8px;">`;
-        content += `<h3 style="margin-top: 0; text-align: center;">🏆 Fun Awards 🏆</h3>`;
-        if (data.awards.least_cards) {
-            content += `<div style="margin-bottom: 8px;">🃏 <b>Minimalist:</b> ${data.awards.least_cards.name} played the fewest cards (${data.awards.least_cards.value})</div>`;
+    const clientName = document.getElementById('username').value.trim();
+    if (data.winner && data.winner === clientName) {
+        const h2 = document.querySelector('#game-over-text h2');
+        if (h2) {
+            h2.innerText = "You have won! 🎉";
         }
-        if (data.awards.quickest) {
-            content += `<div style="margin-bottom: 8px;">⚡ <b>Speedster:</b> ${data.awards.quickest.name} averaged ${data.awards.quickest.value}s per turn</div>`;
-        }
-        if (data.awards.most_nudges) {
-            content += `<div style="margin-bottom: 8px;">🚨 <b>Impatient:</b> ${data.awards.most_nudges.name} sent the most nudges (${data.awards.most_nudges.value})</div>`;
-        }
-        if (data.awards.most_penalties) {
-            content += `<div style="margin-bottom: 8px;">🎯 <b>Target Practice:</b> ${data.awards.most_penalties.name} drew the most penalty cards (${data.awards.most_penalties.value})</div>`;
-        }
-        if (data.awards.most_power) {
-            content += `<div style="margin-bottom: 8px;">🔥 <b>Power Player:</b> ${data.awards.most_power.name} dropped the most power cards (${data.awards.most_power.value})</div>`;
-        }
-        content += `</div>`;
     }
 
-    if (isDemoGame) {
-        content += `<div style="margin-top: 15px; color: #17a2b8; font-weight: bold; text-align: center;">Starting new demo game in 10 seconds...</div>`;
-    }
-
-    document.getElementById('game-over-text').innerHTML = content;
-
-    const closeBtn = document.querySelector('#game-over-modal button');
+    const closeBtn = document.getElementById('close-game-over-btn');
     if (closeBtn) {
-        closeBtn.innerText = isDemoGame ? 'Next Demo Game!' : 'Back to Game!';
+        closeBtn.innerText = data.is_demo ? 'Next Demo Game!' : 'Back to Game!';
     }
 
     document.getElementById('game-over-modal').style.display = 'flex';
 
-    if (isDemoGame) {
+    if (data.is_demo) {
         if (window.demoNextGameTimeout) clearTimeout(window.demoNextGameTimeout);
         window.demoNextGameTimeout = setTimeout(() => {
             if (document.getElementById('game-over-modal').style.display === 'flex') {
@@ -669,24 +602,18 @@ function selectAvatar(avatar) {
     document.getElementById('avatar-modal').style.display = 'none';
 }
 
-// Expose core UI handlers globally for inline onclick attributes
-window.organizeHand = organizeHand;
-window.playSelected = playSelected;
-window.drawOrResolve = drawOrResolve;
-window.selectAceSuit = selectAceSuit;
-window.triggerNudge = triggerNudge;
-window.resetGame = resetGame;
+// Retain dynamic modal functions for HTML snippets
 window.confirmResetGame = confirmResetGame;
-window.startDemo = startDemo;
-window.stopDemo = stopDemo;
-window.closeGameOverModal = closeGameOverModal;
-window.joinGame = joinGame;
-window.startGame = startGame;
-window.logout = logout;
-window.showAvatarModal = showAvatarModal;
 window.selectAvatar = selectAvatar;
 
 function logout() {
+    const modal = document.getElementById('confirm-logout-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function executeLogout() {
     localStorage.removeItem('blackjack_player_name');
     window.location.href = '/logout';
 }
@@ -711,7 +638,8 @@ function showToast(message) {
 
 async function soundEffect(type) {
     // Ensure audioCtx is initialized and resumed
-    if (!audioCtx) return;
+    if (!audioCtx) initAudio();
+    if (!audioCtx) return; // Fallback if unsupported
     if (audioCtx.state === 'suspended') {
         try {
             await audioCtx.resume();
@@ -796,7 +724,10 @@ function resetGame() {
         showToast('Enter your name to request a reset.');
         return;
     }
-    document.getElementById('confirm-reset-modal').style.display = 'flex';
+    const modal = document.getElementById('confirm-reset-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
 }
 
 function confirmResetGame() {
@@ -805,6 +736,7 @@ function confirmResetGame() {
 }
 
 function startDemo() {
+    initAudio();
     isDemoMode = true;
     const startBtn = document.getElementById('start-demo-btn');
     const stopBtn = document.getElementById('stop-demo-btn');
@@ -825,6 +757,61 @@ function stopDemo() {
 
 // Initialize the lobby with a decorative placeholder before socket/join events
 function initLobbyVisuals() {
+    // Fetch HTML snippets for UI modals dynamically
+    fetch('/snippets/modals')
+        .then(response => response.text())
+        .then(html => {
+            document.body.insertAdjacentHTML('beforeend', html);
+            
+            // Bind modal buttons once they are available in the DOM
+            const bindModal = (id, fn) => { const btn = document.getElementById(id); if(btn) btn.onclick = fn; };
+            bindModal('ace-hearts-btn', () => selectAceSuit('Hearts'));
+            bindModal('ace-diamonds-btn', () => selectAceSuit('Diamonds'));
+            bindModal('ace-clubs-btn', () => selectAceSuit('Clubs'));
+            bindModal('ace-spades-btn', () => selectAceSuit('Spades'));
+            bindModal('close-game-over-btn', closeGameOverModal);
+            bindModal('confirm-logout-btn', executeLogout);
+            bindModal('cancel-logout-btn', () => document.getElementById('confirm-logout-modal').style.display = 'none');
+            bindModal('confirm-reset-action-btn', confirmResetGame);
+            bindModal('cancel-reset-btn', () => document.getElementById('confirm-reset-modal').style.display = 'none');
+        });
+
+    // Bind all buttons cleanly via JS to avoid inline handler conflicts
+    const bind = (id, fn) => { const btn = document.getElementById(id); if(btn) btn.onclick = fn; };
+    bind('join-btn', joinGame);
+    bind('logout-btn', logout);
+    bind('reset-btn', resetGame);
+    bind('start-game-btn', startGame);
+    bind('start-demo-btn', startDemo);
+    bind('stop-demo-btn', stopDemo);
+    bind('shuffle-players-btn', () => socket.emit('shuffle_players'));
+    bind('shuffle-hand-btn', () => organizeHand('shuffle'));
+    bind('sort-hand-btn', () => organizeHand('sort'));
+    bind('play-btn', playSelected);
+    bind('action-draw-btn', drawOrResolve);
+
+    // Add Enter key support for the username input field
+    const nameInput = document.getElementById('username');
+    if (nameInput) {
+        nameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') joinGame();
+        });
+    }
+
+    // Delegate clicks for dynamically rendered components (Avatars and Nudges)
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('nudge-btn')) {
+            triggerNudge(e.target.dataset.target);
+        } else if (e.target.classList.contains('interactive-avatar') || e.target.closest('.interactive-avatar')) {
+            showAvatarModal();
+        } else if (e.target.classList.contains('removable-bot') || e.target.closest('.removable-bot')) {
+            const row = e.target.closest('.player-row');
+            if (row && row.dataset.name) {
+                socket.emit('remove_bot', { name: row.dataset.name });
+            }
+        }
+    });
+
     const frame = document.getElementById('top-card');
     if (frame && !frame.innerHTML.trim()) {
         frame.className = 'card image-card';
@@ -833,7 +820,7 @@ function initLobbyVisuals() {
     }
 
     // Ensure the reset button is hidden initially to prevent UI layout flashes
-    let resetBtn = document.querySelector('button[onclick="resetGame()"]');
+    let resetBtn = document.getElementById('reset-btn');
     if (resetBtn) resetBtn.style.display = 'none';
 
     let stopDemoBtn = document.getElementById('stop-demo-btn');
@@ -881,7 +868,7 @@ socket.on('received_cards', (data) => {
     soundEffect('draw');
     showToast(msg);
     const logBox = document.getElementById('game-log-box');
-    logBox.innerHTML += `<div>📥 ${msg}</div>`;
+    logBox.insertAdjacentHTML('beforeend', `<div>📥 ${msg}</div>`);
     logBox.scrollTop = logBox.scrollHeight;
 
     // brief visual on the hand area
@@ -936,7 +923,7 @@ function animateReceivedCards(count, cards, isPenalty) {
         // remove after transition
         setTimeout(() => {
             el.classList.add('fade-out');
-            setTimeout(() => { try { document.body.removeChild(el); } catch (e) {} }, 300);
+            setTimeout(() => el.remove(), 300);
         }, 900 + i * 70);
     }
 }

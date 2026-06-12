@@ -1,0 +1,11 @@
+{% if not league_table %}
+<tr><td colspan="3" style="color:#aaa;">No records found.</td></tr>
+{% else %}
+    {% for entry in league_table %}
+    <tr>
+        <td>{{ entry.name }}</td>
+        <td style="color:#28a745; font-weight:bold;">{{ entry.wins }}</td>
+        <td style="color:#dc3545;">{{ entry.losses }}</td>
+    </tr>
+    {% endfor %}
+{% endif %}
