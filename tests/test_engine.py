@@ -660,9 +660,10 @@ def test_play_joker_fails_with_two_active_players_and_spectator():
     assert success is False
     assert '2-player' in msg
 
-def test_enforce_turn_timer_auto_draws_after_30_seconds():
+def test_enforce_turn_timer_auto_draws_after_30_seconds(monkeypatch):
     game = FamilyBlackjackEngine()
     game.players = ['Alice', 'Bob']
+    monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: [{'suit': 'Spades', 'value': '3'}] * 52)
     game.start_game()
     game.current_turn_index = 0
     game.hands = {'Alice': [{'suit': 'Spades', 'value': 'King'}], 'Bob': [{'suit': 'Spades', 'value': 'Queen'}]}
@@ -676,9 +677,10 @@ def test_enforce_turn_timer_auto_draws_after_30_seconds():
     assert len(game.hands['Alice']) == 2
     assert game.current_turn_index == 1
 
-def test_enforce_turn_timer_with_penalty():
+def test_enforce_turn_timer_with_penalty(monkeypatch):
     game = FamilyBlackjackEngine()
     game.players = ['Alice', 'Bob']
+    monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: [{'suit': 'Spades', 'value': '3'}] * 52)
     game.start_game()
     game.current_turn_index = 0
     game.hands = {'Alice': [{'suit': 'Hearts', 'value': 'Jack'}], 'Bob': [{'suit': 'Spades', 'value': 'Queen'}]}
