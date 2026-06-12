@@ -21,14 +21,16 @@
     </style>
 </head>
 <body class="not-joined">
-
+    <div>
+        <span id="red-game-buttons" style="width: 10%;">
+            <button id="logout-btn" class="btn-header" style="display:none;">Logout</button>
+            <button id="reset-btn" class="btn-header" style="display:none;">Stop Game</button>
+        </span>
+    </div>
     <div id="toast-notification"></div>
 
-    <h1>♠ Family Black Jack ♣
-        <button id="logout-btn" style="display:none; font-size:12px; float:right; background:#b02a37; color:white; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Logout</button>
-        <button id="reset-btn" style="display:none; font-size:12px; float:right; background:#b02a37; color:white; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Stop Game</button>
-    </h1>
-    
+    <h1>♠ Family Black-Jack ♣</h1>
+
     <div id="setup-panel">
         <input type="text" id="username" placeholder="Enter Your Name">
         <button id="join-btn">Join Table</button>
@@ -40,6 +42,7 @@
     </div>
 
     <div id="table">
+
         <div class="table-panel">
     <div class="status-dashboard">
         <div class="status-row">
@@ -69,10 +72,10 @@
     <div id="player-list-box"></div>
     
     <div class="lobby-actions" id="lobby-controls">
-        <button id="start-game-btn" style="width: 100%; margin: 4px 0;">Start Game</button>
-        <button id="shuffle-players-btn" style="width: 100%; margin: 4px 0; background: #6f42c1; color: white;">🔀 Shuffle Players 🔀</button>
-        <button id="start-demo-btn" style="width: 100%; margin: 4px 0; background: #17a2b8; color: white;">🤖 Demo 🤖</button>
-        <button id="stop-demo-btn" style="width: 100%; margin: 4px 0; background: #fd7e14; color: white; display: none;">🤖 Finish Demo 🤖</button>
+        <button id="start-game-btn" class="btn-lobby">Start Game</button>
+        <button id="shuffle-players-btn" class="btn-lobby btn-purple">🔀 Shuffle Players</button>
+        <button id="start-demo-btn" class="btn-lobby btn-info">🤖 Demo</button>
+        <button id="stop-demo-btn" class="btn-lobby btn-warning" style="display: none;">🤖 Finish Demo</button>
     </div>
 </div>
 
@@ -90,8 +93,8 @@
             <h3 class="panel-heading" style="margin: 5px 0;">Your Hand</h3>
             
             <div style="margin-bottom: 8px;">
-                <button id="shuffle-hand-btn" type="button" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Randomise Hand</button>
-                <button id="sort-hand-btn" type="button" style="background: #2b5c8f; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">📊 Sort Hand</button>
+                <button id="shuffle-hand-btn" class="btn-action-small btn-dark-green" type="button">🎲 Randomise Hand</button>
+                <button id="sort-hand-btn" class="btn-action-small btn-blue" type="button">📊 Sort Hand</button>
             </div>
 
             <div id="my-hand"></div>
@@ -103,16 +106,16 @@
             
             <div id="queen-actions" style="display:none; margin-top: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
                 <p style="color: #ffeb3b; font-weight: bold; margin: 0 0 5px 0; font-size: 14px;">👑 Queen Cascade Dump Suit:</p>
-                <button id="cascade-hearts-btn" style="padding: 6px 12px; font-size: 13px;">♥</button>
-                <button id="cascade-diamonds-btn" style="padding: 6px 12px; font-size: 13px;">♦</button>
-                <button id="cascade-clubs-btn" style="padding: 6px 12px; font-size: 13px;">♣</button>
-                <button id="cascade-spades-btn" style="padding: 6px 12px; font-size: 13px;">♠</button>
+                <button id="cascade-hearts-btn" class="btn-cascade">♥</button>
+                <button id="cascade-diamonds-btn" class="btn-cascade">♦</button>
+                <button id="cascade-clubs-btn" class="btn-cascade">♣</button>
+                <button id="cascade-spades-btn" class="btn-cascade">♠</button>
             </div>
         </div>
-
+        
         <div class="table-panel">
             <details class="league-details" open>
-                <summary>🏆 League Table</summary>
+                <summary>🏆 League Table 🏆</summary>
                 <div class="league-content">
                     <table class="league-table">
                         <thead>

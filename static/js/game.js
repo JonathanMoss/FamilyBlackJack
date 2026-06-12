@@ -244,7 +244,8 @@ socket.on('state_update', (state) => {
         if (!addBotBtn) {
             addBotBtn = document.createElement('button');
             addBotBtn.id = 'add-bot-btn';
-            addBotBtn.innerText = '🤖 Add Bot 🤖';
+            addBotBtn.className = 'btn-lobby';
+            addBotBtn.innerText = '🤖 Add Bot';
             addBotBtn.onclick = () => socket.emit('add_bot');
             document.getElementById('lobby-controls').appendChild(addBotBtn);
         }
