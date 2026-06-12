@@ -575,7 +575,7 @@ function createConfirmResetModal() {
     modal.innerHTML = `
         <div class="modal-content">
             <h3 style="margin-top:0;">Stop Match?</h3>
-            <p>Are you sure you want to stop the current match? This will clear hands, remove bots, and return players to the lobby.</p>
+            <p>Are you sure you want to stop the current match and return all players to the lobby?</p>
             <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px;">
                 <button onclick="confirmResetGame()" style="background-color: #dc3545;">Stop Match</button>
                 <button onclick="document.getElementById('confirm-reset-modal').style.display='none'" style="background-color: #6c757d;">Cancel</button>

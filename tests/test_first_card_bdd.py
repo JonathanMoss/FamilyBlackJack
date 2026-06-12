@@ -50,7 +50,7 @@ if 'flask_socketio' not in sys.modules:
     socketio_stub.join_room = lambda *args, **kwargs: None
     sys.modules['flask_socketio'] = socketio_stub
 
-from app import FamilyBlackjackEngine
+from game_engine import FamilyBlackjackEngine
 
 FEATURE_FILE = os.path.join(os.path.dirname(__file__), '..', 'features', 'first_card_start.feature')
 

@@ -60,7 +60,7 @@ if 'flask_socketio' not in sys.modules:
     socketio_stub.join_room = lambda *args, **kwargs: None
     sys.modules['flask_socketio'] = socketio_stub
 
-from app import FamilyBlackjackEngine, BOT_NAME
+from game_engine import FamilyBlackjackEngine, BOT_NAME
 
 
 def build_fixed_deck(card_order):
