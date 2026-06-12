@@ -185,6 +185,8 @@ def run_bot_logic(expected_bot_name):
                 'game_log', {
                     'msg': f"📝 {bot_name} played : {cards_desc}"}, room='game_room'
             )
+            
+            socketio.emit('play_sound', {'type': 'play'}, room='game_room')
 
             if len(game.hands.get(bot_name, [])) == 0:
                 if bot_name in getattr(game, 'match_stats', {}):
@@ -199,6 +201,7 @@ def run_bot_logic(expected_bot_name):
                 awards = game.calculate_awards()
                 game.clear_bots_if_humans()
                 socketio.emit('game_over', {'winner': bot_name, 'awards': awards}, room='game_room')
+                socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
                 broadcast_state()
                 return
 
@@ -208,6 +211,7 @@ def run_bot_logic(expected_bot_name):
                     {
                         'msg': f"📢 🔥 {bot_name} is down to their LAST CARD!"
                     }, room='game_room')
+                socketio.emit('play_sound', {'type': 'penalty'}, room='game_room')
 
             if possible_play[-1]['value'] == 'Ace':
                 new_hand = game.hands.get(bot_name, [])
@@ -234,6 +238,7 @@ def run_bot_logic(expected_bot_name):
             game.advance_turn(steps=1 + skips)
         else:
             if game.get_current_player_name() == bot_name:
+                socketio.emit('play_sound', {'type': 'draw'}, room='game_room')
                 game.draw_card(bot_name, 1, reason='draw_fallback')
                 broadcast_state()
                 socketio.sleep(2.0)
@@ -248,12 +253,14 @@ def run_bot_logic(expected_bot_name):
                 if getattr(game, 'penalty_source', None):
                     log_msg += f" (caused by {game.penalty_source})"
                 socketio.emit('game_log', {'msg': log_msg}, room='game_room')
+                socketio.emit('play_sound', {'type': 'penalty'}, room='game_room')
                 game.draw_card(bot_name, game.accumulated_penalty, reason='penalty_auto')
                 game.accumulated_penalty = 0
                 game.active_penalty_type = None
                 game.penalty_source = None
             else:
                 socketio.emit('game_log', {'msg': f"🎴 {bot_name} drew a card."}, room='game_room')
+                socketio.emit('play_sound', {'type': 'draw'}, room='game_room')
                 game.draw_card(bot_name, 1, reason='draw')
             broadcast_state()
             socketio.sleep(2.0)
@@ -359,6 +366,9 @@ def handle_start_demo():
     sid = request.sid
     requester = game.sid_to_name.get(sid, "Someone")
     
+    # Store currently connected humans
+    connected_humans = list(game.sid_to_name.values())
+
     # Clear current players but keep connections (spectator mode)
     game.players = []
     game.host_name = None
@@ -373,6 +383,8 @@ def handle_start_demo():
     )
     
     if game.start_game():
+        for human in connected_humans:
+            game.add_player(human)
         _broadcast_match_start()
     else:
         emit('error', {'msg': 'Failed to start demo mode!'})

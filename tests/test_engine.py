@@ -472,6 +472,21 @@ def test_update_league_results_increments_stats():
     assert game.league_losses['Bob'] == 1
     assert game.league_losses['Charlie'] == 1
 
+def test_update_league_results_skips_spectators():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob', 'Charlie']
+    # Alice and Bob were active in the match, Charlie joined mid-game (spectator)
+    game.match_stats = {'Alice': {}, 'Bob': {}}
+    
+    for p in game.players:
+        game.register_league_player(p)
+
+    game.update_league_results('Alice')
+
+    assert game.league_wins['Alice'] == 1
+    assert game.league_losses['Bob'] == 1
+    assert game.league_losses['Charlie'] == 0  # Spectator avoids the loss!
+
 def test_reset_match_preserves_roster_but_clears_state():
     game = FamilyBlackjackEngine()
     game.players = ['Alice', 'Bob']

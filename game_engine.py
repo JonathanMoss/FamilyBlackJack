@@ -399,6 +399,8 @@ class FamilyBlackjackEngine:
 
         for name in self.players:
             if name != winner_name:
+                if self.match_stats and name not in self.match_stats:
+                    continue
                 self.register_league_player(name)
                 if not name.startswith('🤖'):
                     self.league_losses[name] += 1
