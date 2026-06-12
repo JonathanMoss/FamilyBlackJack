@@ -821,3 +821,71 @@ def test_multiple_bots_joker_cooldown_ordering(monkeypatch):
     assert game.current_turn_index == 1
     assert game.joker_cooldown == 0
     assert game.jokers_available['🤖 Bot 2'] is True
+
+def test_clear_bots_if_humans_removes_bots_when_humans_present():
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', '🤖 Bot 1', 'Bob', '🤖 Bot 2']
+    game.hands = {'Alice': [], '🤖 Bot 1': [], 'Bob': [], '🤖 Bot 2': []}
+    
+    game.clear_bots_if_humans()
+    
+    assert game.players == ['Alice', 'Bob']
+    assert '🤖 Bot 1' not in game.hands
+    assert '🤖 Bot 2' not in game.hands
+    assert 'Alice' in game.hands
+    assert 'Bob' in game.hands
+
+def test_clear_bots_if_humans_keeps_bots_when_no_humans():
+    game = FamilyBlackjackEngine()
+    game.players = ['🤖 Bot 1', '🤖 Bot 2']
+    game.hands = {'🤖 Bot 1': [], '🤖 Bot 2': []}
+    
+    game.clear_bots_if_humans()
+    
+    assert game.players == ['🤖 Bot 1', '🤖 Bot 2']
+    assert '🤖 Bot 1' in game.hands
+    assert '🤖 Bot 2' in game.hands
+
+def test_bot_logic_game_over_clears_bots_if_humans(monkeypatch):
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', '🤖 Bot 1']
+    game.is_started = True
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': 'King'}],
+        '🤖 Bot 1': [{'suit': 'Spades', 'value': '5'}]
+    }
+    game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
+    game.current_turn_index = 1
+    
+    app.game = game
+    app.run_bot_logic('🤖 Bot 1')
+    
+    assert game.is_started is False
+    assert '🤖 Bot 1' not in game.players
+    assert 'Alice' in game.players
+
+def test_handle_play_game_over_clears_bots_if_humans(monkeypatch):
+    import app
+    
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', '🤖 Bot 1']
+    game.is_started = True
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': '5'}],
+        '🤖 Bot 1': [{'suit': 'Hearts', 'value': 'King'}]
+    }
+    game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
+    game.current_turn_index = 0
+    game.sid_to_name = {'fake_sid': 'Alice'}
+    game.name_to_sid = {'Alice': 'fake_sid'}
+    
+    app.game = game
+    monkeypatch.setattr(app.request, 'sid', 'fake_sid')
+    
+    app.handle_play({'cards': [{'suit': 'Spades', 'value': '5'}]})
+    
+    assert game.is_started is False
+    assert '🤖 Bot 1' not in game.players
+    assert 'Alice' in game.players

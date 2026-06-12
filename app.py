@@ -18,13 +18,17 @@ app.config['SECRET_KEY'] = 'blackjack_family_secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 BOT_NAME = "🤖 Computer"
+BOT_ROSTER = [
+    "🤖 HAL 9000", "🤖 The Architect", "🤖 KITT", "🤖 V'ger",
+    "🤖 Ash", "🤖 R2-D2", "🤖 C3-PO"
+]
 
 
 # pylint: disable=too-many-instance-attributes
 class FamilyBlackjackEngine:
     """Core state machine managing players, card decks, and gameplay rounds."""
 
-    def __init__(self):
+    def __init__(self, turn_timeout=30.0):
         """Initialize defaults for a fresh blackjack lobby."""
         self.players = []          # Ordered list of Unique Usernames
         self.sid_to_name = {}      # Maps active connection request.sid -> Name
@@ -35,6 +39,9 @@ class FamilyBlackjackEngine:
         self.current_turn_index = 0
         self.direction = 1
         self.is_started = False
+        
+        self.turn_timeout = turn_timeout
+        self.host_name = None
 
         # Rotational Dealer Tracking Variable
         self.match_dealer_index = -1  # Increments to 0 on match setup
@@ -77,6 +84,7 @@ class FamilyBlackjackEngine:
         self.avatars = {}
         self.jokers_available = {}
         self.joker_cooldown = 0
+        self.host_name = None
         # Note: We intentionally DO NOT clear league_wins or league_losses
         # so career family stats persist across separate game room lobbies!
 
@@ -101,6 +109,7 @@ class FamilyBlackjackEngine:
         self.current_turn_start_time = 0.0
         self.jokers_available = {}
         self.joker_cooldown = 0
+        self.host_name = None
 
     def build_deck(self):  # pylint: disable=no-self-use
         """Construct a fresh 52-card deck array and shuffle it.
@@ -126,6 +135,8 @@ class FamilyBlackjackEngine:
         Args:
             name (str): The unique profile username.
         """
+        if name.startswith('🤖'):
+            return
         if name not in self.league_wins:
             self.league_wins[name] = 0
         if name not in self.league_losses:
@@ -146,6 +157,18 @@ class FamilyBlackjackEngine:
                     self.players.remove(BOT_NAME)
                     return True
         return False
+
+    def clear_bots_if_humans(self):
+        """Remove bot players from the lobby if any human players are present."""
+        humans = [p for p in self.players if not p.startswith('🤖')]
+        if humans:
+            bots = [p for p in self.players if p.startswith('🤖')]
+            for bot in bots:
+                self.players.remove(bot)
+                if bot in self.hands:
+                    del self.hands[bot]
+            if self.players:
+                self.current_turn_index %= len(self.players)
 
     def start_game(self):
         """Boot up a brand new card round from the active lobby.
@@ -229,12 +252,15 @@ class FamilyBlackjackEngine:
         Returns:
             str or None: Username of active player or None.
         """
-        return self.players[self.current_turn_index] if self.players else None
+        if not self.players:
+            return None
+        return self.players[self.current_turn_index % len(self.players)]
 
     def _skip_spectators(self):
         """Helper to ensure current_turn_index points to an active player with cards."""
         if not self.players or not self.is_started:
             return
+        self.current_turn_index %= len(self.players)
         attempts = 0
         while (not self.hands.get(self.players[self.current_turn_index]) and
                attempts < len(self.players)):
@@ -368,12 +394,14 @@ class FamilyBlackjackEngine:
             winner_name (str): Target identity of the round victor.
         """
         self.register_league_player(winner_name)
-        self.league_wins[winner_name] += 1
+        if not winner_name.startswith('🤖'):
+            self.league_wins[winner_name] += 1
 
         for name in self.players:
             if name != winner_name:
                 self.register_league_player(name)
-                self.league_losses[name] += 1
+                if not name.startswith('🤖'):
+                    self.league_losses[name] += 1
 
     def _calculate_penalty_update(self, card, current_type, current_accumulated, player_name):
         """Helper to determine the new penalty state after playing a card.
@@ -597,7 +625,7 @@ class FamilyBlackjackEngine:
             return None
 
         elapsed = time.time() - self.current_turn_start_time
-        if elapsed >= 30.0:
+        if elapsed >= self.turn_timeout:
             was_penalty = False
             penalty_amount = 1
             if self.accumulated_penalty > 0:
@@ -791,8 +819,10 @@ def run_bot_logic(expected_bot_name):
 
                 game.update_league_results(bot_name)
                 game.is_started = False
+                game.host_name = None
 
                 awards = game.calculate_awards()
+                game.clear_bots_if_humans()
                 socketio.emit('game_over', {'winner': bot_name, 'awards': awards}, room='game_room')
                 broadcast_state()
                 return
@@ -872,11 +902,7 @@ def handle_add_bot():
     if current_bots >= 3:
         return emit('error', {'msg': 'Maximum of 3 bots allowed.'})
 
-    possible_names = [
-        "🤖 HAL 9000", "🤖 The Architect", "🤖 KITT", "🤖 V'ger",
-        "🤖 Ash", "🤖 R2-D2", "🤖 C3-PO"
-    ]
-    available_names = [n for n in possible_names if n not in game.players]
+    available_names = [n for n in BOT_ROSTER if n not in game.players]
     if not available_names:
         return emit('error', {'msg': 'No more bots available'})
 
@@ -960,12 +986,9 @@ def handle_start_demo():
     
     # Clear current players but keep connections (spectator mode)
     game.players = []
+    game.host_name = None
     
-    possible_names = [
-        "🤖 HAL 9000", "🤖 The Architect", "🤖 KITT", "🤖 V'ger",
-        "🤖 Ash", "🤖 R2-D2", "🤖 C3-PO"
-    ]
-    for bot in random.sample(possible_names, 3):
+    for bot in random.sample(BOT_ROSTER, 3):
         game.add_player(bot)
         
     socketio.emit(
@@ -1019,9 +1042,13 @@ def handle_stop_demo():
 @socketio.on('start_match')
 def handle_start():
     """Transition state parameters to live round execution modes."""
+    sid = request.sid
+    requester = game.sid_to_name.get(sid)
+    game.host_name = requester
     if game.start_game():
         _broadcast_match_start()
     else:
+        game.host_name = None
         emit('error', {'msg': 'Need at least 2 players to start!'})
 
 
@@ -1056,12 +1083,14 @@ def handle_play(data):
             game.update_league_results(name)
 
             game.is_started = False
+            game.host_name = None
             game.accumulated_penalty = 0
             game.active_penalty_type = None
             game.declared_ace_suit = None
             game.penalty_source = None
 
             awards = game.calculate_awards()
+            game.clear_bots_if_humans()
             socketio.emit(
                 'game_over',
                 {'winner': name, 'awards': awards},
@@ -1159,15 +1188,29 @@ def handle_reset_match():
         emit('error', {'msg': 'You must be in the lobby to reset the match.'})
         return
 
+    if not game.is_started:
+        emit('error', {'msg': 'There is no active match to stop.'})
+        return
+
+    if requester != game.host_name:
+        emit('error', {'msg': 'Only the match host can stop the game.'})
+        return
+
+    bots = [p for p in game.players if p.startswith('🤖')]
+    for bot in bots:
+        game.players.remove(bot)
+        if bot in game.hands:
+            del game.hands[bot]
+
     game.reset_match()
     socketio.emit(
         'game_log',
-        {'msg': f"🧹 {requester} reset the current match."},
+        {'msg': f"🛑 {requester} stopped the game. All bots have been removed."},
         room='game_room'
     )
     socketio.emit(
         'room_reset',
-        {'msg': 'Match has been reset by a player.'},
+        {'msg': 'Match stopped and returned to lobby.'},
         room='game_room'
     )
     broadcast_state()
@@ -1317,6 +1360,7 @@ def broadcast_state():
 
     state = {
         'is_started': game.is_started,
+        'host_name': getattr(game, 'host_name', None),
         'top_card': top_card,
         'active_suit': active_suit,
         'current_player': current_player,

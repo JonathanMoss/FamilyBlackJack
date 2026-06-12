@@ -248,18 +248,91 @@ socket.on('state_update', (state) => {
         if (!addBotBtn) {
             addBotBtn = document.createElement('button');
             addBotBtn.id = 'add-bot-btn';
-            addBotBtn.innerText = '🤖 Add Bot';
+            addBotBtn.innerText = '🤖 Add Bot 🤖';
             addBotBtn.onclick = () => socket.emit('add_bot');
             document.getElementById('lobby-controls').appendChild(addBotBtn);
         }
+
+        let startGameBtn = document.querySelector('button[onclick="startGame()"]');
+        if (isDemoMode) {
+            if (startGameBtn) startGameBtn.style.display = 'none';
+            if (addBotBtn) addBotBtn.style.display = 'none';
+        } else {
+            if (startGameBtn) startGameBtn.style.display = 'inline-block';
+            if (addBotBtn) addBotBtn.style.display = 'inline-block';
+        }
     } else {
         document.getElementById('lobby-controls').style.display = 'none';
+    }
+
+    let resetBtn = document.querySelector('button[onclick="resetGame()"]');
+    let stopDemoBtn = document.getElementById('stop-demo-btn');
+    
+    // If the reset button doesn't exist, or is trapped inside the hidden lobby-controls container, dynamically inject/move it!
+    if (!resetBtn || (resetBtn.parentElement && resetBtn.parentElement.id === 'lobby-controls')) {
+        if (!resetBtn) {
+            resetBtn = document.createElement('button');
+            resetBtn.innerText = 'Stop Game';
+            resetBtn.setAttribute('onclick', 'resetGame()');
+        }
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn && logoutBtn.parentElement) {
+            logoutBtn.parentElement.insertBefore(resetBtn, logoutBtn);
+        }
+    }
+
+    // Always ensure the reset button matches the logout button's styling and layout constraints
+    const logoutBtnRef = document.getElementById('logout-btn');
+    if (resetBtn && logoutBtnRef) {
+        if (logoutBtnRef.className) {
+            resetBtn.className = logoutBtnRef.className;
+        }
+        resetBtn.style.width = 'auto';
+        resetBtn.style.flex = 'none';
+        resetBtn.style.marginRight = '10px';
+    }
+
+    if (resetBtn) {
+        if (state.is_started && !isDemoMode) {
+            resetBtn.style.display = 'inline-block';
+            if (state.host_name === clientName) {
+                resetBtn.disabled = false;
+                resetBtn.style.opacity = '1';
+                resetBtn.style.cursor = 'pointer';
+            } else {
+                resetBtn.disabled = true;
+                resetBtn.style.opacity = '0.5';
+                resetBtn.style.cursor = 'not-allowed';
+            }
+        } else {
+            resetBtn.style.display = 'none';
+        }
+    }
+
+    let startDemoBtn = document.getElementById('start-demo-btn');
+    if (startDemoBtn) {
+        if (isDemoMode) {
+            startDemoBtn.style.display = 'none';
+        } else {
+            startDemoBtn.style.display = 'inline-block';
+        }
+    }
+
+    if (stopDemoBtn) {
+        if (isDemoMode) {
+            stopDemoBtn.style.display = 'inline-block';
+        } else {
+            stopDemoBtn.style.display = 'none';
+        }
     }
 
     // --- REFACTORED WORKFLOW: REPREMIUMIZED MATCH DASHBOARD SYSTEM ---
     const turnContainer = document.getElementById('turn-badge-container');
     const turnMessage = document.getElementById('turn-message');
     const statusDot = document.getElementById('game-status-dot');
+    
+    // Clear any existing turn warning timeout to prevent ghost prompts when state changes
+    if (window.turnWarningTimeout) clearTimeout(window.turnWarningTimeout);
 
     if (!state.is_started) {
         statusDot.style.background = '#dc3545'; // Dead/Idle Red
@@ -307,9 +380,6 @@ socket.on('state_update', (state) => {
                 });
             });
 
-            // Clear any existing turn warning timeout
-            if (window.turnWarningTimeout) clearTimeout(window.turnWarningTimeout);
-            
             // Setup the 8-second remaining wobble nudge
             if (state.current_player === clientName && remaining > 8) {
                 window.turnWarningTimeout = setTimeout(() => {
@@ -496,6 +566,26 @@ function createAvatarModal() {
 }
 createAvatarModal();
 
+function createConfirmResetModal() {
+    if (document.getElementById('confirm-reset-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'confirm-reset-modal';
+    modal.className = 'generic-modal';
+    modal.style.display = 'none';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <h3 style="margin-top:0;">Stop Match?</h3>
+            <p>Are you sure you want to stop the current match? This will clear hands, remove bots, and return players to the lobby.</p>
+            <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px;">
+                <button onclick="confirmResetGame()" style="background-color: #dc3545;">Stop Match</button>
+                <button onclick="document.getElementById('confirm-reset-modal').style.display='none'" style="background-color: #6c757d;">Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+createConfirmResetModal();
+
 socket.on('prompt_ace_suit', () => {
     document.getElementById('ace-modal').style.display = 'flex';
 });
@@ -536,12 +626,35 @@ socket.on('game_over', (data) => {
         }
         content += `</div>`;
     }
+
+    if (isDemoMode) {
+        content += `<div style="margin-top: 15px; color: #17a2b8; font-weight: bold; text-align: center;">Starting new demo game in 10 seconds...</div>`;
+    }
+
     document.getElementById('game-over-text').innerHTML = content;
+
+    const closeBtn = document.querySelector('#game-over-modal button');
+    if (closeBtn) {
+        closeBtn.innerText = isDemoMode ? 'Next Demo Game!' : 'Back to Game!';
+    }
+
     document.getElementById('game-over-modal').style.display = 'flex';
+
+    if (isDemoMode) {
+        if (window.demoNextGameTimeout) clearTimeout(window.demoNextGameTimeout);
+        window.demoNextGameTimeout = setTimeout(() => {
+            if (isDemoMode && document.getElementById('game-over-modal').style.display === 'flex') {
+                closeGameOverModal();
+            }
+        }, 10000);
+    }
 });
 
 function closeGameOverModal() {
     document.getElementById('game-over-modal').style.display = 'none';
+    if (isDemoMode) {
+        socket.emit('start_demo');
+    }
 }
 
 function showAvatarModal() {
@@ -560,6 +673,7 @@ window.drawOrResolve = drawOrResolve;
 window.selectAceSuit = selectAceSuit;
 window.triggerNudge = triggerNudge;
 window.resetGame = resetGame;
+window.confirmResetGame = confirmResetGame;
 window.startDemo = startDemo;
 window.stopDemo = stopDemo;
 window.closeGameOverModal = closeGameOverModal;
@@ -679,7 +793,11 @@ function resetGame() {
         showToast('Enter your name to request a reset.');
         return;
     }
-    if(!confirm('Are you sure you want to reset the current match? This will clear hands but keep league stats.')) return;
+    document.getElementById('confirm-reset-modal').style.display = 'flex';
+}
+
+function confirmResetGame() {
+    document.getElementById('confirm-reset-modal').style.display = 'none';
     socket.emit('reset_match');
 }
 
@@ -694,6 +812,7 @@ function startDemo() {
 
 function stopDemo() {
     isDemoMode = false;
+    if (window.demoNextGameTimeout) clearTimeout(window.demoNextGameTimeout);
     const startBtn = document.getElementById('start-demo-btn');
     const stopBtn = document.getElementById('stop-demo-btn');
     if (startBtn) startBtn.style.display = 'inline-block';
@@ -709,6 +828,13 @@ function initLobbyVisuals() {
         const imgPath = `/static/images/ace_of_spades.png`;
         frame.innerHTML = `<img src="${imgPath}" class="card-img" alt="Ace of Spades Placeholder">`;
     }
+
+    // Ensure the reset button is hidden initially to prevent UI layout flashes
+    let resetBtn = document.querySelector('button[onclick="resetGame()"]');
+    if (resetBtn) resetBtn.style.display = 'none';
+
+    let stopDemoBtn = document.getElementById('stop-demo-btn');
+    if (stopDemoBtn) stopDemoBtn.style.display = 'none';
 
     // Auto-join if a name was previously saved
     const savedName = localStorage.getItem('blackjack_player_name');
@@ -726,6 +852,7 @@ socket.on('room_reset', (data) => {
     showToast(data.msg || 'Match reset.');
     
     isDemoMode = false;
+    if (window.demoNextGameTimeout) clearTimeout(window.demoNextGameTimeout);
     const startDemoBtn = document.getElementById('start-demo-btn');
     if (startDemoBtn) startDemoBtn.style.display = 'inline-block';
     const stopDemoBtn = document.getElementById('stop-demo-btn');

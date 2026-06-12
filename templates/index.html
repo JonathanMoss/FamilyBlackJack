@@ -26,6 +26,7 @@
 
     <h1>♠ Family Black Jack ♣
         <button id="logout-btn" onclick="logout()" style="display:none; font-size:12px; float:right; background:#b02a37; color:white; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Logout</button>
+        <button id="reset-btn" onclick="resetGame()" style="display:none; font-size:12px; float:right; background:#b02a37; color:white; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Stop Game</button>
     </h1>
     
     <div id="setup-panel">
@@ -86,10 +87,9 @@
     <div id="player-list-box"></div>
     
     <div class="lobby-actions" id="lobby-controls">
-        <button onclick="startGame()" style="width: 100%; margin: 4px 0;">🚀 Start Game</button>
-        <button onclick="resetGame()" style="width: 100%; margin: 4px 0; background: #b02a37; color: white;">🧹 Reset Game</button>
-        <button onclick="startDemo()" id="start-demo-btn" style="width: 100%; margin: 4px 0; background: #17a2b8; color: white;">🤖 Start 3-Bot Demo</button>
-        <button onclick="stopDemo()" id="stop-demo-btn" style="width: 100%; margin: 4px 0; background: #fd7e14; color: white; display: none;">🛑 Finish Demo</button>
+        <button onclick="startGame()" style="width: 100%; margin: 4px 0;">Start Game</button>
+        <button onclick="startDemo()" id="start-demo-btn" style="width: 100%; margin: 4px 0; background: #17a2b8; color: white;">🤖 Demo 🤖</button>
+        <button onclick="stopDemo()" id="stop-demo-btn" style="width: 100%; margin: 4px 0; background: #fd7e14; color: white; display: none;">🤖 Finish Demo 🤖</button>
     </div>
 </div>
 
@@ -107,8 +107,8 @@
             <h3 class="panel-heading" style="margin: 5px 0;">Your Hand</h3>
             
             <div style="margin-bottom: 8px;">
-                <button type="button" onclick="organizeHand('shuffle')" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Randomise Hand Order</button>
-                <button type="button" onclick="organizeHand('sort')" style="background: #2b5c8f; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">📊 Sort (Suit & Rank)</button>
+                <button type="button" onclick="organizeHand('shuffle')" style="background: #4a544c; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">🎲 Randomise Hand</button>
+                <button type="button" onclick="organizeHand('sort')" style="background: #2b5c8f; color: white; padding: 6px 12px; font-size: 12px; margin: 2px;">📊 Sort Hand</button>
             </div>
 
             <div id="my-hand"></div>
