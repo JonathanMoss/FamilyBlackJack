@@ -31,6 +31,21 @@ if not hasattr(app, 'app_context'):
     app.app_context = lambda: DummyAppContext()
 
 
+def get_player_colors(players_iterable):
+    """Generate a mapping of player names to UI colors based on bot difficulty."""
+    colors = {}
+    for p in players_iterable:
+        if p.startswith('🤖'):
+            if p in ["🤖 R2-D2", "🤖 C3-PO"]:
+                colors[p] = '#4CAF50'  # Green for Easy
+            elif p in ["🤖 HAL 9000", "🤖 The Architect"]:
+                colors[p] = '#F44336'  # Red for Hard
+            else:
+                colors[p] = '#FF9800'  # Orange for Medium
+        else:
+            colors[p] = ''
+    return colors
+
 @app.route('/')
 def index():
     """Render application baseline index template layout.
@@ -145,9 +160,11 @@ def _handle_game_over(winner_name):
 
     awards = game.calculate_awards()
     is_demo = all(p.startswith('🤖') for p in game.players)
+    all_players = set(game.players + list(game.league_wins.keys()))
+    player_colors = get_player_colors(all_players)
     try:
         with app.app_context():
-            html_content = render_template('snippets/game_over.html', winner=winner_name, awards=awards, is_demo=is_demo)
+            html_content = render_template('snippets/game_over.html', winner=winner_name, awards=awards, is_demo=is_demo, player_colors=player_colors)
     except Exception:
         html_content = f"<h2>Winner: {winner_name}!</h2><p>Game Over!</p>"
 
@@ -166,12 +183,20 @@ def run_bot_logic(expected_bot_name):
     if not bot_name or bot_name != expected_bot_name:
         return
 
-    # 0. Joker Logic (30% chance to play if available and not on cooldown)
+    # Assign bot difficulties based on their name
+    difficulty = 'medium'
+    if bot_name in ["🤖 R2-D2", "🤖 C3-PO"]:
+        difficulty = 'easy'
+    elif bot_name in ["🤖 HAL 9000", "🤖 The Architect"]:
+        difficulty = 'hard'
+
+    # 0. Joker Logic (chance to play if available and not on cooldown)
     active_players_count = sum(1 for p in game.players if len(game.hands.get(p, [])) > 0)
     if active_players_count > 2 and \
             getattr(game, 'jokers_available', {}).get(bot_name, False) and \
             getattr(game, 'joker_cooldown', 0) == 0:
-        if random.random() < 0.3:
+        joker_chance = {'easy': 0.1, 'medium': 0.3, 'hard': 0.6}.get(difficulty, 0.3)
+        if random.random() < joker_chance:
             success, _ = game.play_joker(bot_name)
             if success:
                 log_msg = f"🃏🔄 {bot_name} played a Joker! Play direction is reversed!"
@@ -213,13 +238,27 @@ def run_bot_logic(expected_bot_name):
         ]
         if valid_starters:
             best_chain = []
-            for starter in valid_starters:
-                chain = [starter]
-                for c in hand:
-                    if c != starter and c['value'] == starter['value']:
-                        chain.append(c)
-                if len(chain) > len(best_chain):
-                    best_chain = chain
+            if difficulty == 'easy':
+                best_chain = [valid_starters[0]]
+            else:
+                next_idx = (game.current_turn_index + game.direction) % len(game.players)
+                next_player = game.players[next_idx]
+                next_cards = len(game.hands.get(next_player, []))
+
+                for starter in valid_starters:
+                    chain = [starter]
+                    for c in hand:
+                        if c != starter and c['value'] == starter['value']:
+                            chain.append(c)
+                    if len(chain) > len(best_chain):
+                        best_chain = chain
+                    elif len(chain) == len(best_chain) and difficulty == 'hard':
+                        # Prioritize attacks if the next player is close to winning
+                        if next_cards <= 2 and starter['value'] in ['2', '8', 'Jack']:
+                            best_chain = chain
+                        # Otherwise prefer saving power cards
+                        elif starter['value'] not in ['2', '8', 'Jack', 'Queen'] and best_chain and best_chain[0]['value'] in ['2', '8', 'Jack', 'Queen']:
+                            best_chain = chain
             possible_play = best_chain
 
     if possible_play:
@@ -250,8 +289,11 @@ def run_bot_logic(expected_bot_name):
                 if not new_hand:
                     chosen_suit = "Spades"
                 else:
-                    suits = [c['suit'] for c in new_hand]
-                    chosen_suit = max(set(suits), key=suits.count)
+                    if difficulty == 'easy':
+                        chosen_suit = random.choice(['Hearts', 'Diamonds', 'Clubs', 'Spades'])
+                    else:
+                        suits = [c['suit'] for c in new_hand]
+                        chosen_suit = max(set(suits), key=suits.count)
 
                 game.declared_ace_suit = chosen_suit
                 socketio.emit(
@@ -799,6 +841,9 @@ def broadcast_state():
         })
     scoreboards.sort(key=lambda x: x['wins'], reverse=True)
 
+    all_players = set(game.players + list(game.league_wins.keys()))
+    player_colors = get_player_colors(all_players)
+
     current_player = game.get_current_player_name()
     current_sid = (
         game.name_to_sid.get(current_player) if current_player else None
@@ -806,7 +851,7 @@ def broadcast_state():
 
     try:
         with app.app_context():
-            league_html = render_template('snippets/league_table.html', league_table=scoreboards)
+            league_html = render_template('snippets/league_table.html', league_table=scoreboards, player_colors=player_colors)
     except Exception:
         league_html = "<tr><td colspan='3'>Scoreboard offline.</td></tr>"
 
@@ -820,6 +865,7 @@ def broadcast_state():
         'penalty': game.accumulated_penalty,
         'penalty_type': game.active_penalty_type,
         'player_list': game.players,
+        'player_colors': player_colors,
         'avatars': getattr(game, 'avatars', {}),
         'jokers_available': getattr(game, 'jokers_available', {}),
         'joker_cooldown': getattr(game, 'joker_cooldown', 0),
