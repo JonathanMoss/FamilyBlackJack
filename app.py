@@ -129,6 +129,34 @@ def check_for_bot_turn():
     if current_player and current_player.startswith('🤖'):
         socketio.start_background_task(run_bot_logic, current_player)
 
+def _handle_game_over(winner_name):
+    """Helper to process game over state and broadcast to clients."""
+    if winner_name in getattr(game, 'match_stats', {}):
+        elapsed = time.time() - game.current_turn_start_time
+        game.match_stats[winner_name]['turn_time_total'] += elapsed
+        game.match_stats[winner_name]['turn_count'] += 1
+
+    game.update_league_results(winner_name)
+
+    game.is_started = False
+    game.host_name = None
+    game.clear_penalty()
+    game.declared_ace_suit = None
+
+    awards = game.calculate_awards()
+    is_demo = all(p.startswith('🤖') for p in game.players)
+    try:
+        with app.app_context():
+            html_content = render_template('snippets/game_over.html', winner=winner_name, awards=awards, is_demo=is_demo)
+    except Exception:
+        html_content = f"<h2>Winner: {winner_name}!</h2><p>Game Over!</p>"
+
+    game.clear_bots_if_humans()
+    socketio.emit(
+        'game_over', {'html': html_content, 'is_demo': is_demo, 'winner': winner_name}, room='game_room'
+    )
+    socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
+    broadcast_state()
 
 def run_bot_logic(expected_bot_name):
     """Background task simulating computer thinking and decision making."""
@@ -206,29 +234,7 @@ def run_bot_logic(expected_bot_name):
             socketio.emit('play_sound', {'type': 'play'}, room='game_room')
 
             if len(game.hands.get(bot_name, [])) == 0:
-                if bot_name in getattr(game, 'match_stats', {}):
-                    elapsed = time.time() - game.current_turn_start_time
-                    game.match_stats[bot_name]['turn_time_total'] += elapsed
-                    game.match_stats[bot_name]['turn_count'] += 1
-
-                game.update_league_results(bot_name)
-                game.is_started = False
-                game.host_name = None
-
-                awards = game.calculate_awards()
-                is_demo = all(p.startswith('🤖') for p in game.players)
-                try:
-                    with app.app_context():
-                        html_content = render_template('snippets/game_over.html', winner=bot_name, awards=awards, is_demo=is_demo)
-                except Exception:
-                    html_content = f"<h2>Winner: {bot_name}!</h2><p>Game Over!</p>"
-
-                game.clear_bots_if_humans()
-                socketio.emit(
-                    'game_over', {'html': html_content, 'is_demo': is_demo, 'winner': bot_name}, room='game_room'
-                )
-                socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
-                broadcast_state()
+                _handle_game_over(bot_name)
                 return
 
             if len(game.hands.get(bot_name, [])) == 1:
@@ -281,9 +287,7 @@ def run_bot_logic(expected_bot_name):
                 socketio.emit('game_log', {'msg': log_msg}, room='game_room')
                 socketio.emit('play_sound', {'type': 'penalty'}, room='game_room')
                 game.draw_card(bot_name, game.accumulated_penalty, reason='penalty_auto')
-                game.accumulated_penalty = 0
-                game.active_penalty_type = None
-                game.penalty_source = None
+                game.clear_penalty()
             else:
                 socketio.emit('game_log', {'msg': f"🎴 {bot_name} drew a card."}, room='game_room')
                 socketio.emit('play_sound', {'type': 'draw'}, room='game_room')
@@ -541,35 +545,7 @@ def handle_play(data):
 
         # 🏁 CRITICAL FIX: VICTORY POSITION CLEANUP
         if len(game.hands.get(name, [])) == 0:
-            if name in getattr(game, 'match_stats', {}):
-                elapsed = time.time() - game.current_turn_start_time
-                game.match_stats[name]['turn_time_total'] += elapsed
-                game.match_stats[name]['turn_count'] += 1
-
-            game.update_league_results(name)
-
-            game.is_started = False
-            game.host_name = None
-            game.accumulated_penalty = 0
-            game.active_penalty_type = None
-            game.declared_ace_suit = None
-            game.penalty_source = None
-
-            awards = game.calculate_awards()
-            is_demo = all(p.startswith('🤖') for p in game.players)
-            try:
-                with app.app_context():
-                    html_content = render_template('snippets/game_over.html', winner=name, awards=awards, is_demo=is_demo)
-            except Exception:
-                html_content = f"<h2>Winner: {name}!</h2><p>Game Over!</p>"
-
-            game.clear_bots_if_humans()
-            socketio.emit(
-                'game_over', {'html': html_content, 'is_demo': is_demo, 'winner': name},
-                room='game_room'
-            )
-            socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
-            broadcast_state()
+            _handle_game_over(name)
             return None
 
         if len(game.hands.get(name, [])) == 1:
@@ -719,9 +695,7 @@ def handle_draw():
             'game_log', {'msg': log_msg}, room='game_room'
         )
         game.draw_card(name, game.accumulated_penalty, reason='penalty_manual')
-        game.accumulated_penalty = 0
-        game.active_penalty_type = None
-        game.penalty_source = None
+        game.clear_penalty()
     else:
         socketio.emit(
             'game_log',

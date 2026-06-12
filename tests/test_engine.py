@@ -696,6 +696,7 @@ def test_enforce_turn_timer_with_penalty():
 def test_enforce_turn_timer_draws_all_cards_in_single_call(monkeypatch):
     game = FamilyBlackjackEngine()
     game.players = ['Alice', 'Bob']
+    monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: [{'suit': 'Spades', 'value': '3'}] * 52)
     game.start_game()
     game.current_turn_index = 0
     game.hands = {'Alice': [{'suit': 'Hearts', 'value': 'Jack'}], 'Bob': [{'suit': 'Spades', 'value': 'Queen'}]}
@@ -715,9 +716,10 @@ def test_enforce_turn_timer_draws_all_cards_in_single_call(monkeypatch):
     assert len(draws) == 1
     assert draws[0] == ('Alice', 6, 'penalty_timeout')
 
-def test_enforce_turn_timer_with_pending_ace_declaration():
+def test_enforce_turn_timer_with_pending_ace_declaration(monkeypatch):
     game = FamilyBlackjackEngine()
     game.players = ['Alice', 'Bob']
+    monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: [{'suit': 'Spades', 'value': '3'}] * 52)
     game.start_game()
     game.current_turn_index = 0
     game.hands = {'Alice': [{'suit': 'Spades', 'value': 'King'}], 'Bob': [{'suit': 'Spades', 'value': 'Queen'}]}

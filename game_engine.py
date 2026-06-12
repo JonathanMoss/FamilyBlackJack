@@ -6,6 +6,8 @@
 import random
 import time
 
+from rule_engine import RuleEngine
+
 BOT_NAME = "🤖 Computer"
 BOT_ROSTER = [
     "🤖 HAL 9000", "🤖 The Architect", "🤖 KITT", "🤖 V'ger",
@@ -87,6 +89,12 @@ class FamilyBlackjackEngine:
         # Note: We intentionally DO NOT clear league_wins or league_losses
         # so career family stats persist across separate game room lobbies!
 
+    def clear_penalty(self):
+        """Reset active penalty accumulation states."""
+        self.accumulated_penalty = 0
+        self.active_penalty_type = None
+        self.penalty_source = None
+
     def reset_match(self):
         """Reset only the active match state but keep lobby players and career stats.
 
@@ -100,10 +108,8 @@ class FamilyBlackjackEngine:
         self.current_turn_index = 0
         self.direction = 1
         self.is_started = False
-        self.active_penalty_type = None
-        self.accumulated_penalty = 0
+        self.clear_penalty()
         self.declared_ace_suit = None
-        self.penalty_source = None
         self.match_stats = {}
         self.current_turn_start_time = 0.0
         self.jokers_available = {}
@@ -204,10 +210,8 @@ class FamilyBlackjackEngine:
         starter = self.deck.pop()
         self.discard_pile.append(starter)
 
-        self.active_penalty_type = None
-        self.accumulated_penalty = 0
+        self.clear_penalty()
         self.declared_ace_suit = None
-        self.penalty_source = None
 
         self.match_stats = {
             p: {
@@ -297,14 +301,8 @@ class FamilyBlackjackEngine:
         Returns:
             bool: True if counter is valid or no penalty exists, False otherwise.
         """
-        if self.accumulated_penalty == 0:
-            return True
         hand = self.hands.get(name, [])
-        if self.active_penalty_type == '2':
-            return any(card['value'] == '2' for card in hand)
-        if self.active_penalty_type == 'BJ':
-            return any(card['value'] == 'Jack' for card in hand)
-        return False
+        return RuleEngine.has_valid_penalty_counter(hand, self.active_penalty_type, self.accumulated_penalty)
 
     def check_and_enforce_autodraw(self):
         """Evaluate penalty counters; trigger card drawings for undefended states."""
@@ -333,9 +331,7 @@ class FamilyBlackjackEngine:
             if target_sid:
                 self.emit('play_sound', {'type': 'penalty'}, to=target_sid)
 
-            self.accumulated_penalty = 0
-            self.active_penalty_type = None
-            self.penalty_source = None
+            self.clear_penalty()
 
             self.advance_turn(steps=1)
 
@@ -403,35 +399,6 @@ class FamilyBlackjackEngine:
                 if not name.startswith('🤖'):
                     self.league_losses[name] += 1
 
-    def _calculate_penalty_update(self, card, current_type, current_accumulated, player_name):
-        """Helper to determine the new penalty state after playing a card.
-
-        Returns:
-            tuple: (new_penalty_type, new_accumulated_penalty, new_penalty_source)
-        """
-        new_type = current_type
-        new_accumulated = current_accumulated
-        new_source = self.penalty_source
-
-        if card['value'] == '2':
-            new_accumulated = new_accumulated + 2 if current_type == '2' else 2
-            new_type = '2'
-            new_source = player_name
-        elif card['value'] == 'Jack' and card['suit'] in ['Spades', 'Clubs']:
-            new_accumulated = new_accumulated + 5 if current_type == 'BJ' else 5
-            new_type = 'BJ'
-            new_source = player_name
-        elif (
-            card['value'] == 'Jack' and
-            card['suit'] in ['Hearts', 'Diamonds'] and
-            current_type == 'BJ'
-        ):
-            new_type = None
-            new_accumulated = 0
-            new_source = None
-
-        return new_type, new_accumulated, new_source
-
     # pylint: disable=too-many-return-statements
     def validate_and_play_move(self, name, selected_cards):
         """Process legal game plays against rules and active penalties.
@@ -467,78 +434,24 @@ class FamilyBlackjackEngine:
 
         top_card = self.discard_pile[-1]
         is_ace_active = self.declared_ace_suit and top_card['value'] == 'Ace'
-        is_table_queen = top_card['value'] == 'Queen'
         active_suit = self.declared_ace_suit if is_ace_active else top_card['suit']
-        active_val = top_card['value']
 
-        # Pre-calculate intended penalty enforcement.
-        last_card = matched_cards[-1]
-        last_is_bj = (last_card['value'] == 'Jack' and last_card['suit'] in ['Spades', 'Clubs'])
-        last_is_rj = (last_card['value'] == 'Jack' and last_card['suit'] in ['Hearts', 'Diamonds'])
-        last_is_two = (last_card['value'] == '2')
-
-        if self.accumulated_penalty > 0:
-            if self.active_penalty_type == '2' and not last_is_two:
-                return False, "Your last card must be a 2!", 0
-            if self.active_penalty_type == 'BJ' and not (last_is_bj or last_is_rj):
-                return False, "Your last card must be a Jack!", 0
-
-        temp_penalty_type = self.active_penalty_type
-        temp_accumulated = self.accumulated_penalty
-        first_card = matched_cards[0]
-
-        is_valid_match = (
-            first_card['suit'] == active_suit or
-            first_card['value'] == active_val or
-            first_card['value'] == 'Ace'
+        validation_result = RuleEngine.validate_move(
+            matched_cards=matched_cards,
+            top_card=top_card,
+            active_suit=active_suit,
+            active_penalty_type=self.active_penalty_type,
+            accumulated_penalty=self.accumulated_penalty,
+            penalty_source=self.penalty_source,
+            player_name=name
         )
-        if not is_valid_match:
-            err_msg = (
-                f"First card must be a ({active_suit}) "
-                f"or value ({active_val})."
-            )
-            return False, err_msg, 0
 
-        eight_skips = 0
-        fc_card = matched_cards[0]
-        # Determine if we are in a "Queen Dump" state (either started by this play or the table)
-        is_dump_active = fc_card['value'] == 'Queen' or is_table_queen
-        dump_suit = fc_card['suit'] if fc_card['value'] == 'Queen' else active_suit
+        if not validation_result['success']:
+            return False, validation_result['msg'], 0
 
-        for card_idx, card in enumerate(matched_cards):
-            if card_idx > 0:
-                prev_card = matched_cards[card_idx - 1]
-
-                # A card is valid in a chain if:
-                # 1. It matches the rank of the previous card
-                # 2. It matches the suit of the previous card
-                # 3. It is an Ace (wildcard)
-                # 4. It matches the suit of the Queen dump
-                is_same_rank = card['value'] == prev_card['value']
-                is_same_suit = card['suit'] == prev_card['suit']
-                is_ace = card['value'] == 'Ace'
-                is_suit_chain = is_dump_active and card['suit'] == dump_suit
-
-                is_chain_valid = is_same_rank or is_same_suit or is_ace or is_suit_chain
-                if not is_chain_valid:
-                    return (
-                        False,
-                        "Chain invalid: Cards must match rank, suit, be an Ace, or follow a Queen",
-                        0
-                    )
-
-            if card['value'] == '8':
-                eight_skips += 1
-
-            # Accumulate penalties for every card in the chain using the helper
-            (temp_penalty_type,
-             temp_accumulated,
-             self.penalty_source) = self._calculate_penalty_update(
-                 card, temp_penalty_type, temp_accumulated, name
-             )
-
-        self.active_penalty_type = temp_penalty_type
-        self.accumulated_penalty = temp_accumulated
+        self.active_penalty_type = validation_result['new_penalty_type']
+        self.accumulated_penalty = validation_result['new_accumulated_penalty']
+        self.penalty_source = validation_result['new_penalty_source']
         self.declared_ace_suit = None
 
         for card in matched_cards:
@@ -554,7 +467,7 @@ class FamilyBlackjackEngine:
                 self.match_stats[name].get('power_cards_played', 0) + power_count
             )
 
-        return True, "Success", eight_skips
+        return True, validation_result['msg'], validation_result['eight_skips']
 
     def calculate_awards(self):
         """Determine end-of-game fun awards based on match statistics."""
@@ -635,9 +548,7 @@ class FamilyBlackjackEngine:
             if self.accumulated_penalty > 0:
                 penalty_amount = self.accumulated_penalty + 1
                 self.draw_card(current_player, penalty_amount, reason='penalty_timeout')
-                self.accumulated_penalty = 0
-                self.active_penalty_type = None
-                self.penalty_source = None
+                self.clear_penalty()
                 was_penalty = True
             else:
                 self.draw_card(current_player, 1, reason='timeout_draw')
