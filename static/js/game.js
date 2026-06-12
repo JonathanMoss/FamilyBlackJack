@@ -575,7 +575,7 @@ function createConfirmResetModal() {
     modal.innerHTML = `
         <div class="modal-content">
             <h3 style="margin-top:0;">Stop Match?</h3>
-            <p>Are you sure you want to stop the current match? This will clear hands, remove bots, and return players to the lobby.</p>
+            <p>Are you sure you want to stop the current match and return all players to the lobby?</p>
             <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px;">
                 <button onclick="confirmResetGame()" style="background-color: #dc3545;">Stop Match</button>
                 <button onclick="document.getElementById('confirm-reset-modal').style.display='none'" style="background-color: #6c757d;">Cancel</button>
@@ -605,6 +605,9 @@ socket.on('game_log', (data) => {
 
 socket.on('game_over', (data) => {
     soundEffect('winner');
+
+    const isDemoGame = globalState.player_list && globalState.player_list.length > 0 && globalState.player_list.every(p => p.startsWith('🤖'));
+
     let content = `<h2>Winner: ${data.winner}!</h2>`;
     if (data.awards) {
         content += `<div class="awards-section" style="margin-top: 20px; font-size: 0.9em; text-align: left; background: rgba(0,0,0,0.1); padding: 15px; border-radius: 8px;">`;
@@ -627,7 +630,7 @@ socket.on('game_over', (data) => {
         content += `</div>`;
     }
 
-    if (isDemoMode) {
+    if (isDemoGame) {
         content += `<div style="margin-top: 15px; color: #17a2b8; font-weight: bold; text-align: center;">Starting new demo game in 10 seconds...</div>`;
     }
 
@@ -635,15 +638,15 @@ socket.on('game_over', (data) => {
 
     const closeBtn = document.querySelector('#game-over-modal button');
     if (closeBtn) {
-        closeBtn.innerText = isDemoMode ? 'Next Demo Game!' : 'Back to Game!';
+        closeBtn.innerText = isDemoGame ? 'Next Demo Game!' : 'Back to Game!';
     }
 
     document.getElementById('game-over-modal').style.display = 'flex';
 
-    if (isDemoMode) {
+    if (isDemoGame) {
         if (window.demoNextGameTimeout) clearTimeout(window.demoNextGameTimeout);
         window.demoNextGameTimeout = setTimeout(() => {
-            if (isDemoMode && document.getElementById('game-over-modal').style.display === 'flex') {
+            if (document.getElementById('game-over-modal').style.display === 'flex') {
                 closeGameOverModal();
             }
         }, 10000);
