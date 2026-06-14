@@ -368,12 +368,11 @@ socket.on('state_update', (state) => {
             const percent = (remaining / 30) * 100;
             timerBar.style.transition = 'none';
             timerBar.style.width = percent + '%';
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    timerBar.style.transition = `width ${remaining}s linear, background-color 0.3s`;
-                    timerBar.style.width = '0%';
-                });
-            });
+
+            // Force DOM reflow so the browser picks up the width reset before applying the transition
+            void timerBar.offsetWidth;
+            timerBar.style.transition = `width ${remaining}s linear, background-color 0.3s`;
+            timerBar.style.width = '0%';
 
             // Setup the 8-second remaining wobble nudge
             if (state.current_player === clientName && remaining > 8) {

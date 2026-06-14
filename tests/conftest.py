@@ -1,9 +1,5 @@
-import os
 import sys
 import types
-
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, ROOT_DIR)
 
 # Provide minimal Flask stubs if the environment does not have Flask installed.
 if 'flask' not in sys.modules:
@@ -15,6 +11,12 @@ if 'flask' not in sys.modules:
             def decorator(fn):
                 return fn
             return decorator
+
+        def app_context(self):
+            class AppContextStub:
+                def __enter__(self): return self
+                def __exit__(self, *args): pass
+            return AppContextStub()
 
     flask_stub = types.ModuleType('flask')
     flask_stub.Flask = FlaskStub
@@ -28,7 +30,7 @@ if 'flask' not in sys.modules:
 if 'flask_socketio' not in sys.modules:
     class SocketIOStub:
         def __init__(self, *args, **kwargs):
-            self._handlers = {}
+            pass
 
         def emit(self, *args, **kwargs):
             return None
@@ -52,13 +54,3 @@ if 'flask_socketio' not in sys.modules:
     socketio_stub.emit = lambda *args, **kwargs: None
     socketio_stub.join_room = lambda *args, **kwargs: None
     sys.modules['flask_socketio'] = socketio_stub
-
-import pytest
-import app
-
-@pytest.fixture
-def lobby_with_two_players():
-    game = app.FamilyBlackjackEngine()
-    game.add_player("Alice")
-    game.add_player("Bob")
-    return game

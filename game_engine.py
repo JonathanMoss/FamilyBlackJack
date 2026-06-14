@@ -6,7 +6,7 @@
 import random
 import time
 
-from rule_engine import RuleEngine
+import rule_engine
 
 BOT_NAME = "🤖 Computer"
 BOT_ROSTER = [
@@ -278,7 +278,8 @@ class FamilyBlackjackEngine:
             return
 
         current_p = self.get_current_player_name()
-        if self.is_started and getattr(self, 'match_stats', None) and current_p in self.match_stats:
+        if (self.is_started and getattr(self, 'match_stats', None) and
+                current_p in self.match_stats):
             elapsed = time.time() - self.current_turn_start_time
             self.match_stats[current_p]['turn_time_total'] += elapsed
             self.match_stats[current_p]['turn_count'] += 1
@@ -302,7 +303,9 @@ class FamilyBlackjackEngine:
             bool: True if counter is valid or no penalty exists, False otherwise.
         """
         hand = self.hands.get(name, [])
-        return RuleEngine.has_valid_penalty_counter(hand, self.active_penalty_type, self.accumulated_penalty)
+        return rule_engine.has_valid_penalty_counter(
+            hand, self.active_penalty_type, self.accumulated_penalty
+        )
 
     def check_and_enforce_autodraw(self):
         """Evaluate penalty counters; trigger card drawings for undefended states."""
@@ -436,7 +439,7 @@ class FamilyBlackjackEngine:
         is_ace_active = self.declared_ace_suit and top_card['value'] == 'Ace'
         active_suit = self.declared_ace_suit if is_ace_active else top_card['suit']
 
-        validation_result = RuleEngine.validate_move(
+        validation_result = rule_engine.validate_move(
             matched_cards=matched_cards,
             top_card=top_card,
             active_suit=active_suit,
@@ -553,7 +556,8 @@ class FamilyBlackjackEngine:
             else:
                 self.draw_card(current_player, 1, reason='timeout_draw')
 
-            if self.discard_pile and self.discard_pile[-1]['value'] == 'Ace' and not self.declared_ace_suit:
+            if (self.discard_pile and self.discard_pile[-1]['value'] == 'Ace'
+                    and not self.declared_ace_suit):
                 self.declared_ace_suit = self.discard_pile[-1]['suit']
 
             self.advance_turn()

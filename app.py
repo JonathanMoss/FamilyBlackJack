@@ -26,9 +26,12 @@ game.set_socketio(socketio)
 # Fallback for test environments using outdated FlaskStubs
 if not hasattr(app, 'app_context'):
     class DummyAppContext:
-        def __enter__(self): return self
-        def __exit__(self, exc_type, exc_val, exc_tb): pass
-    app.app_context = lambda: DummyAppContext()
+        """Dummy app context for test environments."""
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+    app.app_context = DummyAppContext
 
 
 def get_player_colors(players_iterable):
@@ -164,17 +167,27 @@ def _handle_game_over(winner_name):
     player_colors = get_player_colors(all_players)
     try:
         with app.app_context():
-            html_content = render_template('snippets/game_over.html', winner=winner_name, awards=awards, is_demo=is_demo, player_colors=player_colors)
-    except Exception:
+            html_content = render_template(
+                'snippets/game_over.html',
+                winner=winner_name,
+                awards=awards,
+                is_demo=is_demo,
+                player_colors=player_colors
+            )
+    except Exception as e:  # pylint: disable=broad-except
+        app.logger.error(f"Failed to render game_over.html: {e}")
         html_content = f"<h2>Winner: {winner_name}!</h2><p>Game Over!</p>"
 
     game.clear_bots_if_humans()
     socketio.emit(
-        'game_over', {'html': html_content, 'is_demo': is_demo, 'winner': winner_name}, room='game_room'
+        'game_over',
+        {'html': html_content, 'is_demo': is_demo, 'winner': winner_name},
+        room='game_room'
     )
     socketio.emit('play_sound', {'type': 'victory'}, room='game_room')
     broadcast_state()
 
+# pylint: disable=too-many-nested-blocks, too-many-return-statements
 def run_bot_logic(expected_bot_name):
     """Background task simulating computer thinking and decision making."""
     if not game.is_started:
@@ -257,7 +270,9 @@ def run_bot_logic(expected_bot_name):
                         if next_cards <= 2 and starter['value'] in ['2', '8', 'Jack']:
                             best_chain = chain
                         # Otherwise prefer saving power cards
-                        elif starter['value'] not in ['2', '8', 'Jack', 'Queen'] and best_chain and best_chain[0]['value'] in ['2', '8', 'Jack', 'Queen']:
+                        elif (starter['value'] not in ['2', '8', 'Jack', 'Queen'] and
+                              best_chain and
+                              best_chain[0]['value'] in ['2', '8', 'Jack', 'Queen']):
                             best_chain = chain
             possible_play = best_chain
 
@@ -452,7 +467,10 @@ def _broadcast_match_start():
             room='game_room'
         )
     elif game.active_penalty_type == '2':
-        two_msg = f"⚠️ The first card is a 2! {intended_starter_name} must counter it or draw +2 cards."
+        two_msg = (
+            f"⚠️ The first card is a 2! {intended_starter_name} "
+            "must counter it or draw +2 cards."
+        )
         socketio.emit(
             'game_log',
             {'msg': two_msg},
@@ -500,10 +518,13 @@ def handle_start_demo():
 
     for bot in random.sample(BOT_ROSTER, 3):
         game.add_player(bot)
-    
+
     socketio.emit(
         'game_log',
-        {'msg': f"🎬 {requester} activated Demo Mode! 3 Bots are battling it out!"},
+        {
+            'msg': f"🎬 {requester} activated Demo Mode! "
+                   "3 Bots are battling it out!"
+        },
         room='game_room'
     )
 
@@ -851,8 +872,13 @@ def broadcast_state():
 
     try:
         with app.app_context():
-            league_html = render_template('snippets/league_table.html', league_table=scoreboards, player_colors=player_colors)
-    except Exception:
+            league_html = render_template(
+                'snippets/league_table.html',
+                league_table=scoreboards,
+                player_colors=player_colors
+            )
+    except Exception as e:  # pylint: disable=broad-except
+        app.logger.error(f"Failed to render league_table.html: {e}")
         league_html = "<tr><td colspan='3'>Scoreboard offline.</td></tr>"
 
     state = {
