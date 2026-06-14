@@ -324,7 +324,21 @@ def run_bot_logic(expected_bot_name):
             if not game.is_started:
                 return
 
-            game.advance_turn(steps=1 + skips)
+            game.advance_turn(steps=1)
+            if skips > 0:
+                game.is_paused = True
+                for _ in range(skips):
+                    skipped_player = game.get_current_player_name()
+                    socketio.emit(
+                        'game_log', {'msg': f"🚫 {skipped_player} misses a turn!"}, room='game_room'
+                    )
+                    broadcast_state()
+                    socketio.sleep(2.0)
+                    if not game.is_started:
+                        game.is_paused = False
+                        return
+                    game.advance_turn(steps=1)
+                game.is_paused = False
         else:
             if game.get_current_player_name() == bot_name:
                 socketio.emit('play_sound', {'type': 'draw'}, room='game_room')
@@ -589,6 +603,9 @@ def handle_start():
 @socketio.on('play_cards')
 def handle_play(data):
     """Process incoming discard execution actions."""
+    if getattr(game, 'is_paused', False):
+        return emit('error', {'msg': "Action paused. Please wait."})
+
     sid = request.sid
     name = game.sid_to_name.get(sid)
     if not name or name != game.get_current_player_name():
@@ -626,9 +643,7 @@ def handle_play(data):
             emit('prompt_ace_suit', {}, to=sid)
             broadcast_state()
         else:
-            turn_steps = 1
             if skips > 0:
-                turn_steps += skips
                 skip_msg = (
                     f"{skips} player(s) skipped by the 8 "
                     f"power card sequence!"
@@ -639,7 +654,21 @@ def handle_play(data):
 
             is_penalty_chain = cards[-1]['value'] in ['2', 'Jack']
             if game.accumulated_penalty == 0 or is_penalty_chain:
-                game.advance_turn(steps=turn_steps)
+                game.advance_turn(steps=1)
+                if skips > 0:
+                    game.is_paused = True
+                    for _ in range(skips):
+                        skipped_player = game.get_current_player_name()
+                        socketio.emit(
+                            'game_log', {'msg': f"🚫 {skipped_player} misses a turn!"}, room='game_room'
+                        )
+                        broadcast_state()
+                        socketio.sleep(2.0)
+                        if not game.is_started:
+                            game.is_paused = False
+                            return None
+                        game.advance_turn(steps=1)
+                    game.is_paused = False
             broadcast_state()
             check_for_bot_turn()
     else:
@@ -650,6 +679,9 @@ def handle_play(data):
 @socketio.on('declare_ace_suit')
 def handle_ace_suit(data):
     """Assign wildcard suit constraints following Ace plays."""
+    if getattr(game, 'is_paused', False):
+        return
+
     sid = request.sid
     name = game.sid_to_name.get(sid)
     if not name or name != game.get_current_player_name():
@@ -671,6 +703,10 @@ def handle_ace_suit(data):
 @socketio.on('play_joker')
 def handle_play_joker():
     """Handle a user playing their Joker card to reverse direction."""
+    if getattr(game, 'is_paused', False):
+        emit('error', {'msg': "Action paused. Please wait."})
+        return
+
     sid = request.sid
     name = game.sid_to_name.get(sid)
     if not name:
@@ -740,6 +776,10 @@ def handle_change_avatar(data):
 @socketio.on('take_penalty_or_draw')
 def handle_draw():
     """Draw a card manually or accept the accumulated stack penalty."""
+    if getattr(game, 'is_paused', False):
+        emit('error', {'msg': "Action paused. Please wait."})
+        return
+
     sid = request.sid
     name = game.sid_to_name.get(sid)
     if not name or name != game.get_current_player_name():

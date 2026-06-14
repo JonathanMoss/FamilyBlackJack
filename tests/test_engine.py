@@ -992,3 +992,81 @@ def test_handle_play_game_over_clears_bots_if_humans(monkeypatch):
     assert game.is_started is False
     assert '🤖 Bot 1' not in game.players
     assert 'Alice' in game.players
+
+def test_actions_blocked_while_paused(monkeypatch):
+    import app
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob']
+    game.sid_to_name = {'fake_sid': 'Alice'}
+    game.is_started = True
+    game.is_paused = True
+    app.game = game
+    monkeypatch.setattr(app.request, 'sid', 'fake_sid')
+    
+    emitted = []
+    monkeypatch.setattr(app, 'emit', lambda event, data: emitted.append((event, data)))
+    
+    app.handle_play({'cards': []})
+    app.handle_play_joker()
+    app.handle_draw()
+    app.handle_ace_suit({'suit': 'Spades'}) # Returns silently without emitting
+    
+    assert len(emitted) == 3
+    for ev, data in emitted:
+        assert ev == 'error'
+        assert data['msg'] == 'Action paused. Please wait.'
+
+def test_handle_play_eight_triggers_pause_and_sleep(monkeypatch):
+    import app
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob', 'Charlie']
+    game.is_started = True
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': '8'}, {'suit': 'Hearts', 'value': 'King'}],
+        'Bob': [{'suit': 'Spades', 'value': '2'}],
+        'Charlie': [{'suit': 'Spades', 'value': '3'}]
+    }
+    game.discard_pile = [{'suit': 'Spades', 'value': '5'}]
+    game.current_turn_index = 0
+    game.sid_to_name = {'fake_sid': 'Alice'}
+    game.name_to_sid = {'Alice': 'fake_sid'}
+    
+    app.game = game
+    monkeypatch.setattr(app.request, 'sid', 'fake_sid')
+    
+    sleeps = []
+    monkeypatch.setattr(app.socketio, 'sleep', lambda secs: sleeps.append(secs))
+    
+    app.handle_play({'cards': [{'suit': 'Spades', 'value': '8'}]})
+    
+    # 1 skip -> 1 sleep of 2.0s
+    assert len(sleeps) == 1
+    assert sleeps[0] == 2.0
+    assert getattr(game, 'is_paused', False) is False
+    assert game.get_current_player_name() == 'Charlie'
+
+def test_bot_logic_eight_triggers_pause_and_sleep(monkeypatch):
+    import app
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', BOT_NAME, 'Charlie']
+    game.is_started = True
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': 'King'}],
+        BOT_NAME: [{'suit': 'Hearts', 'value': '8'}, {'suit': 'Spades', 'value': 'King'}],
+        'Charlie': [{'suit': 'Spades', 'value': 'Queen'}]
+    }
+    game.discard_pile = [{'suit': 'Hearts', 'value': '5'}]
+    game.current_turn_index = 1
+    
+    app.game = game
+    sleeps = []
+    monkeypatch.setattr(app.socketio, 'sleep', lambda secs: sleeps.append(secs))
+    
+    app.run_bot_logic(BOT_NAME)
+    
+    # natural delay (2.0) + skip delay (2.0)
+    assert len(sleeps) == 2
+    assert sleeps[0] == 2.0
+    assert sleeps[1] == 2.0
+    assert getattr(game, 'is_paused', False) is False
+    assert game.get_current_player_name() == 'Alice'

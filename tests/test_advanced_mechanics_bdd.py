@@ -216,7 +216,12 @@ def play_chain(game, name, cards):
         game.is_started = False
         return
 
-    game.advance_turn(steps=1 + skips)
+    game.advance_turn(steps=1)
+    if skips > 0:
+        game.is_paused = True
+        for _ in range(skips):
+            game.advance_turn(steps=1)
+        game.is_paused = False
 
 @when('the computer takes its turn')
 def bot_takes_turn(game, monkeypatch):
