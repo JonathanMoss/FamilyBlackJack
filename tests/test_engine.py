@@ -1070,3 +1070,40 @@ def test_bot_logic_eight_triggers_pause_and_sleep(monkeypatch):
     assert sleeps[1] == 2.0
     assert getattr(game, 'is_paused', False) is False
     assert game.get_current_player_name() == 'Alice'
+
+def test_handle_play_final_card_triggers_game_over_rather_than_penalty_or_skip(monkeypatch):
+    import app
+    game = FamilyBlackjackEngine()
+    game.players = ['Alice', 'Bob', 'Charlie']
+    game.is_started = True
+    
+    # Alice plays her last card (an 8). Game should end before skips/penalties process.
+    game.hands = {
+        'Alice': [{'suit': 'Spades', 'value': '8'}],
+        'Bob': [{'suit': 'Spades', 'value': '2'}],
+        'Charlie': [{'suit': 'Spades', 'value': '3'}]
+    }
+    game.discard_pile = [{'suit': 'Spades', 'value': '5'}]
+    game.current_turn_index = 0
+    game.sid_to_name = {'fake_sid': 'Alice'}
+    game.name_to_sid = {'Alice': 'fake_sid'}
+    
+    app.game = game
+    monkeypatch.setattr(app.request, 'sid', 'fake_sid')
+    
+    sleeps = []
+    monkeypatch.setattr(app.socketio, 'sleep', lambda secs: sleeps.append(secs))
+    
+    emitted = []
+    def mock_emit(event, data, **kwargs):
+        emitted.append((event, data))
+        
+    monkeypatch.setattr(app, 'emit', mock_emit)
+    monkeypatch.setattr(app.socketio, 'emit', mock_emit)
+    
+    app.handle_play({'cards': [{'suit': 'Spades', 'value': '8'}]})
+    
+    # Ensure the early return fired -> 0 pauses, game is stopped, game_over emitted
+    assert len(sleeps) == 0
+    assert game.is_started is False
+    assert any(ev == 'game_over' for ev, data in emitted)

@@ -150,3 +150,55 @@ Feature: Advanced Gameplay Mechanics
     Then Alice should automatically draw 1 cards
     And the declared suit should default to "Diamonds"
     And the turn should return to Bob
+
+  Scenario: A player manually draws a card instead of playing
+    Given a game is in progress with Alice and Bob
+    And it is "Alice"'s turn
+    When "Alice" chooses to draw
+    Then Alice should automatically draw 1 cards
+    And the turn should return to Bob
+
+  Scenario: A player manually accepts an accumulated penalty stack
+    Given a game is in progress with Alice and Bob
+    And Alice just played a "Jack of Spades"
+    And it is "Bob"'s turn
+    When "Bob" chooses to take the penalty
+    Then Bob should automatically draw 5 cards
+    And the accumulated penalty should be 0
+    And the turn should return to Alice
+
+  Scenario: The draw pile is empty and reshuffles upon drawing
+    Given a game is in progress with Alice and Bob
+    And the deck is empty
+    And the discard pile has "2 of Hearts", "3 of Clubs", and "Ace of Spades"
+    And it is "Alice"'s turn
+    When "Alice" chooses to draw
+    Then Alice should automatically draw 1 cards
+    And the deck should contain 1 cards
+    And the top card should be "Ace of Spades"
+    And the turn should return to Bob
+
+  Scenario: A player disconnects before the game starts
+    Given a lobby has 3 players "Alice", "Bob", and "Charlie"
+    When "Bob" disconnects from the lobby
+    Then the lobby should have 2 players
+    And "Bob" should not be in the lobby
+
+  Scenario: A player disconnects mid-game
+    Given a game is in progress with Alice and Bob
+    When "Alice" disconnects from the lobby
+    Then "Alice" should still be in the lobby
+    And the lobby should have 2 players
+
+  Scenario: The lobby resets when the last human player disconnects
+    Given a lobby has only one player "Alice"
+    And "🤖 Computer" is in the lobby
+    When "Alice" disconnects from the lobby
+    Then the lobby should automatically reset
+    And the lobby should have 0 players
+
+  Scenario: A player sends a nudge to another player
+    Given a game is in progress with Alice and Bob
+    When "Alice" sends a nudge to "Bob"
+    Then "Alice" should have sent 1 nudges
+    And "Bob" should receive a nudge notification

@@ -114,6 +114,27 @@ def test_bot_chains_multiple_cards(): pass
 @scenario(FEATURE_FILE, 'Computer player plays a chain of penalty cards')
 def test_bot_chains_penalty_cards(): pass
 
+@scenario(FEATURE_FILE, 'A player manually draws a card instead of playing')
+def test_manual_draw(): pass
+
+@scenario(FEATURE_FILE, 'A player manually accepts an accumulated penalty stack')
+def test_manual_accept_penalty(): pass
+
+@scenario(FEATURE_FILE, 'The draw pile is empty and reshuffles upon drawing')
+def test_deck_reshuffle_on_draw(): pass
+
+@scenario(FEATURE_FILE, 'A player disconnects before the game starts')
+def test_disconnect_before_start(): pass
+
+@scenario(FEATURE_FILE, 'A player disconnects mid-game')
+def test_disconnect_mid_game(): pass
+
+@scenario(FEATURE_FILE, 'The lobby resets when the last human player disconnects')
+def test_disconnect_last_human(): pass
+
+@scenario(FEATURE_FILE, 'A player sends a nudge to another player')
+def test_send_nudge(): pass
+
 def clean(text):
     return text.strip().strip('"') if text else text
 
@@ -131,6 +152,11 @@ def game_with_players(engine, players):
                 player_names_list.append(cleaned_name)
 
     engine.players = player_names_list
+    for p in engine.players:
+        if not p.startswith('🤖'):
+            sid = f"fake_sid_{p}"
+            engine.sid_to_name[sid] = p
+            engine.name_to_sid[p] = sid
     engine.is_started = True
     engine.deck = engine.build_deck()
     # Initialize standard generic placeholder hands. 
@@ -156,7 +182,12 @@ def set_turn(game, name):
 
 @given(parsers.parse('a lobby has only one player "{name}"'), target_fixture='game')
 def solo_lobby_setup(engine, name, monkeypatch):
-    engine.players = [clean(name)]
+    cleaned_name = clean(name)
+    engine.players = [cleaned_name]
+    if not cleaned_name.startswith('🤖'):
+        sid = f"fake_sid_{cleaned_name}"
+        engine.sid_to_name[sid] = cleaned_name
+        engine.name_to_sid[cleaned_name] = sid
     # Force a deterministic deck to avoid flakiness from random power cards at start
     monkeypatch.setattr(FamilyBlackjackEngine, 'build_deck', lambda self: [{'suit': 'Spades', 'value': '3'}] * 52)
     return engine
@@ -352,6 +383,11 @@ def time_passes(game, count):
 @given(parsers.parse('a lobby has 3 players "{p1}", "{p2}", and "{p3}"'), target_fixture='game')
 def lobby_setup(engine, p1, p2, p3):
     engine.players = [clean(p1), clean(p2), clean(p3)]
+    for p in engine.players:
+        if not p.startswith('🤖'):
+            sid = f"fake_sid_{p}"
+            engine.sid_to_name[sid] = p
+            engine.name_to_sid[p] = sid
     return engine
 
 @given('a game is in progress')
@@ -383,3 +419,92 @@ def bob_attempts_invalid_match(game, card_spec):
 def assert_rejected_msg(play_result, expected_msg):
     assert not play_result['success']
     assert expected_msg in play_result['msg']
+
+@when(parsers.parse('"{name}" chooses to draw'))
+@when(parsers.parse('"{name}" chooses to take the penalty'))
+def manual_draw_action(game, name, monkeypatch):
+    cleaned_name = clean(name)
+    sid = f"fake_sid_{cleaned_name}"
+    game.sid_to_name[sid] = cleaned_name
+    game.name_to_sid[cleaned_name] = sid
+    monkeypatch.setattr(app.request, 'sid', sid)
+    app.game = game
+    app.handle_draw()
+
+@given('the deck is empty')
+def empty_deck(game):
+    game.deck = []
+
+@given(parsers.parse('the discard pile has "{c1}", "{c2}", and "{c3}"'))
+def set_discard_pile(game, c1, c2, c3):
+    cards = [c1, c2, c3]
+    pile = []
+    for c in cards:
+        val, suit = c.strip().strip('"').split(' of ')
+        pile.append({'suit': suit.strip(), 'value': val.strip()})
+    game.discard_pile = pile
+
+@then(parsers.parse('the deck should contain {count:d} cards'))
+def check_deck_count(game, count):
+    assert len(game.deck) == count
+
+@then(parsers.parse('the top card should be "{card_spec}"'))
+def check_top_card(game, card_spec):
+    val, suit = card_spec.strip().strip('"').split(' of ')
+    top = game.discard_pile[-1]
+    assert top['value'] == val.strip() and top['suit'] == suit.strip()
+
+@when(parsers.parse('"{name}" disconnects from the lobby'))
+def player_disconnects(game, name, monkeypatch):
+    cleaned_name = clean(name)
+    sid = game.name_to_sid.get(cleaned_name)
+    if not sid:
+        sid = f"fake_sid_{cleaned_name}"
+        game.sid_to_name[sid] = cleaned_name
+        game.name_to_sid[cleaned_name] = sid
+    monkeypatch.setattr(app.request, 'sid', sid)
+    app.game = game
+    app.handle_disconnect()
+
+@then(parsers.parse('"{name}" should still be in the lobby'))
+def check_player_still_in_lobby(game, name):
+    assert clean(name) in game.players
+
+@then('the lobby should automatically reset')
+def check_lobby_reset(game):
+    assert not game.is_started
+    assert len(game.players) == 0
+
+@when(parsers.parse('"{sender}" sends a nudge to "{target}"'))
+def send_nudge_action(game, sender, target, monkeypatch):
+    cleaned_sender = clean(sender)
+    cleaned_target = clean(target)
+    sid = game.name_to_sid.get(cleaned_sender)
+    if not sid:
+        sid = f"fake_sid_{cleaned_sender}"
+        game.sid_to_name[sid] = cleaned_sender
+        game.name_to_sid[cleaned_sender] = sid
+    monkeypatch.setattr(app.request, 'sid', sid)
+    app.game = game
+
+    if not hasattr(game, 'emitted_events'):
+        game.emitted_events = []
+
+    def mock_emit(event, data, **kwargs):
+        game.emitted_events.append((event, data, kwargs))
+
+    monkeypatch.setattr(app.socketio, 'emit', mock_emit)
+    app.handle_nudge({'target': cleaned_target, 'emoji': '👋'})
+
+@then(parsers.parse('"{name}" should have sent {count:d} nudges'))
+def check_nudges_sent_stats(game, name, count):
+    assert game.match_stats[clean(name)]['nudges_sent'] == count
+
+@then(parsers.parse('"{name}" should receive a nudge notification'))
+def check_nudge_received(game, name):
+    target_sid = game.name_to_sid.get(clean(name))
+    nudge_events = [
+        ev for ev in getattr(game, 'emitted_events', [])
+        if ev[0] == 'receive_nudge' and ev[2].get('to') == target_sid
+    ]
+    assert len(nudge_events) > 0
