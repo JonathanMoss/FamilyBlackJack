@@ -96,6 +96,7 @@ def handle_join(data):
 
     if name not in game.players:
         was_started = game.is_started
+        game.cached_league_html = None
         bot_yielded = game.add_player(name)
         if was_started:
             socketio.emit('game_log',
@@ -115,11 +116,9 @@ def handle_join(data):
     broadcast_state()
     return None
 
-timer_task_started = False
-
-def turn_timer_loop():
-    """Background task to enforce the 30-second turn limit."""
-    while True:
+def turn_timer_loop_for_match():
+    """Background task to enforce the 30-second turn limit during active matches."""
+    while game.is_started:
         socketio.sleep(1)
         if game.is_started:
             result = game.enforce_turn_timer()
@@ -140,12 +139,8 @@ def turn_timer_loop():
 
 @socketio.on('connect')
 def handle_connect():
-    """Start the global turn timer loop when the first user connects."""
-    # pylint: disable=global-statement
-    global timer_task_started
-    if not timer_task_started:
-        socketio.start_background_task(turn_timer_loop)
-        timer_task_started = True
+    """Log player connection."""
+    app.logger.info("Player connected: %s", request.sid)
 
 def check_for_bot_turn():
     """Determine if the current turn belongs to the computer and trigger AI logic."""
@@ -157,6 +152,7 @@ def check_for_bot_turn():
 
 def _handle_game_over(winner_name):
     """Helper to process game over state and broadcast to clients."""
+    game.cached_league_html = None
     if winner_name in getattr(game, 'match_stats', {}):
         elapsed = time.time() - game.current_turn_start_time
         game.match_stats[winner_name]['turn_time_total'] += elapsed
@@ -399,6 +395,7 @@ def handle_add_bot():
 
     bot_name = random.choice(available_names)
 
+    game.cached_league_html = None
     game.add_player(bot_name)
     socketio.emit(
         'game_log',
@@ -442,6 +439,7 @@ def handle_remove_bot(data):
 
     bot_name = data.get('name')
     if bot_name and bot_name in game.players and bot_name.startswith('🤖'):
+        game.cached_league_html = None
         game.players.remove(bot_name)
         if bot_name in game.hands:
             del game.hands[bot_name]
@@ -523,6 +521,7 @@ def _broadcast_match_start():
         broadcast_state()
 
     check_for_bot_turn()
+    socketio.start_background_task(turn_timer_loop_for_match)
 
 
 @socketio.on('start_demo')
@@ -759,6 +758,7 @@ def handle_reset_match():
         if bot in game.hands:
             del game.hands[bot]
 
+    game.cached_league_html = None
     game.reset_match()
     socketio.emit(
         'game_log',
@@ -861,6 +861,7 @@ def handle_disconnect():
             del game.sid_to_name[sid]
 
         if name in game.players:
+            game.cached_league_html = None
             if not game.is_started:
                 game.players.remove(name)
                 if name in game.hands:
@@ -920,16 +921,18 @@ def broadcast_state():
         game.name_to_sid.get(current_player) if current_player else None
     )
 
-    try:
-        with app.app_context():
-            league_html = render_template(
-                'snippets/league_table.html',
-                league_table=scoreboards,
-                player_colors=player_colors
-            )
-    except Exception as e:  # pylint: disable=broad-except
-        app.logger.error("Failed to render league_table.html: %s", e)
-        league_html = "<tr><td colspan='3'>Scoreboard offline.</td></tr>"
+    if not game.cached_league_html:
+        try:
+            with app.app_context():
+                game.cached_league_html = render_template(
+                    'snippets/league_table.html',
+                    league_table=scoreboards,
+                    player_colors=player_colors
+                )
+        except Exception as e:  # pylint: disable=broad-except
+            app.logger.error("Failed to render league_table.html: %s", e)
+            game.cached_league_html = "<tr><td colspan='3'>Scoreboard offline.</td></tr>"
+    league_html = game.cached_league_html
 
     state = {
         'is_started': game.is_started,

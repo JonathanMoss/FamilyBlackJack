@@ -829,6 +829,7 @@ function initLobbyVisuals() {
             socket.emit('join_game', { name: savedName });
         }
     }
+    preloadCardImages();
 }
 initLobbyVisuals();
 
@@ -929,3 +930,16 @@ socket.on('play_sound', (data) => {
         soundEffect(data.type);
     }
 });
+
+function preloadCardImages() {
+    const suits = ['Hearts', 'Diamonds', 'Clubs', 'Spades'];
+    const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King', 'Ace'];
+    suits.forEach(suit => {
+        values.forEach(value => {
+            const img = new Image();
+            img.src = `/static/images/${value}_of_${suit}.png`.toLowerCase();
+        });
+    });
+    const placeholder = new Image();
+    placeholder.src = '/static/images/ace_of_spades.png';
+}
