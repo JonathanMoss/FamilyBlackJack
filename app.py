@@ -39,10 +39,10 @@ def get_player_colors(players_iterable):
     """Generate a mapping of player names to UI colors based on bot difficulty."""
     colors = {}
     for p in players_iterable:
-        if p.startswith('🤖'):
-            if p in ["🤖 R2-D2", "🤖 C3-PO"]:
+        if game.is_bot(p):
+            if p in ["R2-D2", "C3-PO"]:
                 colors[p] = '#4CAF50'  # Green for Easy
-            elif p in ["🤖 HAL 9000", "🤖 The Architect"]:
+            elif p in ["HAL 9000", "The Architect"]:
                 colors[p] = '#F44336'  # Red for Hard
             else:
                 colors[p] = '#FF9800'  # Orange for Medium
@@ -75,6 +75,21 @@ def modals_snippet():
         '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🦇', '🦉', '🦄'
     ]
     return render_template('snippets/modals.html', avatars=avatars)
+
+
+@app.route('/test-reset')
+def test_reset():
+    """Reset the lobby for testing purposes."""
+    # Only allow reset requests from local loopback address
+    if request.remote_addr not in ['127.0.0.1', 'localhost']:
+        return 'Forbidden', 403
+    game.reset_lobby()
+    game.players = []
+    game.sid_to_name = {}
+    game.name_to_sid = {}
+    game.hands = {}
+    game.is_started = False
+    return 'OK'
 
 
 @socketio.on('join_game')
@@ -147,7 +162,7 @@ def check_for_bot_turn():
     if not game.is_started:
         return
     current_player = game.get_current_player_name()
-    if current_player and current_player.startswith('🤖'):
+    if current_player and game.is_bot(current_player):
         socketio.start_background_task(run_bot_logic, current_player)
 
 def _handle_game_over(winner_name):
@@ -166,7 +181,7 @@ def _handle_game_over(winner_name):
     game.declared_ace_suit = None
 
     awards = game.calculate_awards()
-    is_demo = all(p.startswith('🤖') for p in game.players)
+    is_demo = all(game.is_bot(p) for p in game.players)
     all_players = set(game.players + list(game.league_wins.keys()))
     player_colors = get_player_colors(all_players)
     try:
@@ -202,9 +217,9 @@ def run_bot_logic(expected_bot_name):
 
     # Assign bot difficulties based on their name
     difficulty = 'medium'
-    if bot_name in ["🤖 R2-D2", "🤖 C3-PO"]:
+    if bot_name in ["R2-D2", "C3-PO"]:
         difficulty = 'easy'
-    elif bot_name in ["🤖 HAL 9000", "🤖 The Architect"]:
+    elif bot_name in ["HAL 9000", "The Architect"]:
         difficulty = 'hard'
 
     # 0. Joker Logic (chance to play if available and not on cooldown)
@@ -385,7 +400,7 @@ def handle_add_bot():
     if not requester:
         return emit('error', {'msg': 'You must be in the lobby to add a bot.'})
 
-    current_bots = sum(1 for p in game.players if p.startswith('🤖'))
+    current_bots = sum(1 for p in game.players if game.is_bot(p))
     if current_bots >= 3:
         return emit('error', {'msg': 'Maximum of 3 bots allowed.'})
 
@@ -438,7 +453,7 @@ def handle_remove_bot(data):
         return emit('error', {'msg': 'Cannot remove bots while a match is in progress.'})
 
     bot_name = data.get('name')
-    if bot_name and bot_name in game.players and bot_name.startswith('🤖'):
+    if bot_name and bot_name in game.players and game.is_bot(bot_name):
         game.cached_league_html = None
         game.players.remove(bot_name)
         if bot_name in game.hands:
@@ -573,7 +588,7 @@ def handle_stop_demo():
     game.is_started = False
 
     # Remove all bots
-    bots = [p for p in game.players if p.startswith('🤖')]
+    bots = [p for p in game.players if game.is_bot(p)]
     for bot in bots:
         game.players.remove(bot)
         if bot in game.hands:
@@ -752,7 +767,7 @@ def handle_reset_match():
         emit('error', {'msg': 'Only the match host can stop the game.'})
         return
 
-    bots = [p for p in game.players if p.startswith('🤖')]
+    bots = [p for p in game.players if game.is_bot(p)]
     for bot in bots:
         game.players.remove(bot)
         if bot in game.hands:
@@ -936,6 +951,7 @@ def broadcast_state():
 
     state = {
         'is_started': game.is_started,
+        'bots': [p for p in game.players if game.is_bot(p)],
         'host_name': getattr(game, 'host_name', None),
         'top_card': top_card,
         'active_suit': active_suit,

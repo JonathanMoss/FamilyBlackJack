@@ -90,7 +90,7 @@ def check_player_zero_cards(game_demo, name):
 
 @then('the lobby should contain 3 bots')
 def check_three_bots(game_demo):
-    bots = [p for p in game_demo.players if p.startswith('🤖')]
+    bots = [p for p in game_demo.players if game_demo.is_bot(p)]
     assert len(bots) == 3
 
 @given(parsers.parse('a lobby has active players "{p1}" and "{p2}"'), target_fixture='game_active')
