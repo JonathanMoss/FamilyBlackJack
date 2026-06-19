@@ -8,11 +8,12 @@ import time
 
 import rule_engine
 
-BOT_NAME = "🤖 Computer"
+BOT_NAME = "Computer"
 BOT_ROSTER = [
-    "🤖 HAL 9000", "🤖 The Architect", "🤖 KITT", "🤖 V'ger",
-    "🤖 Ash", "🤖 R2-D2", "🤖 C3-PO"
+    "HAL 9000", "The Architect", "KITT", "V'ger",
+    "Ash", "R2-D2", "C3-PO"
 ]
+
 
 
 class FamilyBlackjackEngine:
@@ -21,6 +22,7 @@ class FamilyBlackjackEngine:
     def __init__(self, turn_timeout=30.0):
         """Initialize defaults for a fresh blackjack lobby."""
         self.players = []          # Ordered list of Unique Usernames
+        self.bots = set()          # Set of bot player names
         self.sid_to_name = {}      # Maps active connection request.sid -> Name
         self.name_to_sid = {}      # Maps Username -> active connection sid
         self.hands = {}            # Maps Username -> Card Array
@@ -143,24 +145,37 @@ class FamilyBlackjackEngine:
         Args:
             name (str): The unique profile username.
         """
-        if name.startswith('🤖'):
+        if self.is_bot(name):
             return
         if name not in self.league_wins:
             self.league_wins[name] = 0
         if name not in self.league_losses:
             self.league_losses[name] = 0
 
+    def is_bot(self, name):
+        """Check if a player name belongs to an AI bot."""
+        if not name:
+            return False
+        if name in self.bots:
+            return True
+        # Backward compatibility for existing tests and rosters
+        if name == BOT_NAME or name in BOT_ROSTER or name.startswith('🤖') or 'Bot' in name:
+            return True
+        return False
+
     def add_player(self, name):
         """Register a new player in the lobby and manage bot yield logic."""
         if name not in self.players:
+            if name == BOT_NAME or name in BOT_ROSTER or name.startswith('🤖') or 'Bot' in name:
+                self.bots.add(name)
             self.players.append(name)
             self.hands[name] = []
             if name not in self.avatars:
-                self.avatars[name] = '🤖' if name.startswith('🤖') else '👤'
+                self.avatars[name] = '🤖' if self.is_bot(name) else '👤'
 
             # If the lobby is idle and we now have multiple humans, remove the bot
             if not self.is_started:
-                human_players = [p for p in self.players if not p.startswith('🤖')]
+                human_players = [p for p in self.players if not self.is_bot(p)]
                 if len(human_players) >= 2 and BOT_NAME in self.players:
                     self.players.remove(BOT_NAME)
                     return True
@@ -168,9 +183,9 @@ class FamilyBlackjackEngine:
 
     def clear_bots_if_humans(self):
         """Remove bot players from the lobby if any human players are present."""
-        humans = [p for p in self.players if not p.startswith('🤖')]
+        humans = [p for p in self.players if not self.is_bot(p)]
         if humans:
-            bots = [p for p in self.players if p.startswith('🤖')]
+            bots = [p for p in self.players if self.is_bot(p)]
             for bot in bots:
                 self.players.remove(bot)
                 if bot in self.hands:
@@ -185,7 +200,7 @@ class FamilyBlackjackEngine:
             bool: True if game initialization succeeds, False otherwise.
         """
         # Clean up computer player if we have enough human players
-        human_players = [p for p in self.players if not p.startswith('🤖')]
+        human_players = [p for p in self.players if not self.is_bot(p)]
         if len(human_players) >= 2 and BOT_NAME in self.players:
             self.players.remove(BOT_NAME)
             self.emit('game_log', {'msg': f"{BOT_NAME} has shutdown!"}, room='game_room')
@@ -193,6 +208,7 @@ class FamilyBlackjackEngine:
         # Automatically add a computer player if someone starts alone
         if len(self.players) == 1:
             if BOT_NAME not in self.players:
+                self.bots.add(BOT_NAME)
                 self.players.append(BOT_NAME)
                 self.avatars[BOT_NAME] = '🤖'
 
@@ -318,7 +334,7 @@ class FamilyBlackjackEngine:
         current_name = self.get_current_player_name()
 
         # Let the bot logic handle its own auto-draw with a natural delay
-        if current_name and current_name.startswith('🤖'):
+        if current_name and self.is_bot(current_name):
             return
 
         if not self.has_valid_penalty_counter(current_name):
@@ -394,7 +410,7 @@ class FamilyBlackjackEngine:
             winner_name (str): Target identity of the round victor.
         """
         self.register_league_player(winner_name)
-        if not winner_name.startswith('🤖'):
+        if not self.is_bot(winner_name):
             self.league_wins[winner_name] += 1
 
         for name in self.players:
@@ -402,7 +418,7 @@ class FamilyBlackjackEngine:
                 if self.match_stats and name not in self.match_stats:
                     continue
                 self.register_league_player(name)
-                if not name.startswith('🤖'):
+                if not self.is_bot(name):
                     self.league_losses[name] += 1
 
     # pylint: disable=too-many-return-statements
@@ -544,7 +560,7 @@ class FamilyBlackjackEngine:
         if not self.is_started:
             return None
         current_player = self.get_current_player_name()
-        if not current_player or current_player.startswith('🤖'):
+        if not current_player or self.is_bot(current_player):
             return None
 
         elapsed = time.time() - self.current_turn_start_time

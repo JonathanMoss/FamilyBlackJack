@@ -50,19 +50,19 @@ Feature: Advanced Gameplay Mechanics
     Given a lobby has only one player "Alice"
     When the game starts
     Then "Alice" should have 7 cards
-    And "🤖 Computer" should have 7 cards
+    And "Computer" should have 7 cards
 
   Scenario: Computer player leaves when a second human joins an idle lobby
     Given a lobby has only one player "Alice"
-    And "🤖 Computer" is in the lobby
+    And "Computer" is in the lobby
     When "Bob" joins the lobby
-    Then "🤖 Computer" should not be in the lobby
+    Then "Computer" should not be in the lobby
     And the lobby should have 2 players
 
   Scenario: Computer player yields when a match starts with enough humans
-    Given a lobby has 3 players "Alice", "🤖 Computer", and "Bob"
+    Given a lobby has 3 players "Alice", "Computer", and "Bob"
     When the game starts
-    Then "🤖 Computer" should not be in the lobby
+    Then "Computer" should not be in the lobby
     And the lobby should have 2 players
 
   Scenario: Calculating end of game fun awards
@@ -94,22 +94,22 @@ Feature: Advanced Gameplay Mechanics
     Then the play should be rejected with message "Joker is on cooldown"
 
   Scenario: Computer player plays a chain of cards of the same rank
-    Given a game is in progress with Alice and 🤖 Computer
+    Given a game is in progress with Alice and Computer
     And the top card is "10 of Hearts"
-    And "🤖 Computer" has "5 of Hearts", "5 of Spades", "5 of Diamonds", and "King of Spades" in hand
-    And it is "🤖 Computer"'s turn
+    And "Computer" has "5 of Hearts", "5 of Spades", "5 of Diamonds", and "King of Spades" in hand
+    And it is "Computer"'s turn
     When the computer takes its turn
-    Then "🤖 Computer" should have 1 cards left
+    Then "Computer" should have 1 cards left
     And the turn should return to Alice
 
   Scenario: Computer player plays a chain of penalty cards
-    Given a game is in progress with Alice and 🤖 Computer
+    Given a game is in progress with Alice and Computer
     And Alice just played a "2 of Clubs"
     And Alice has "2 of Diamonds" in hand
-    And "🤖 Computer" has "2 of Spades", "2 of Hearts", and "5 of Diamonds" in hand
-    And it is "🤖 Computer"'s turn
+    And "Computer" has "2 of Spades", "2 of Hearts", and "5 of Diamonds" in hand
+    And it is "Computer"'s turn
     When the computer takes its turn
-    Then "🤖 Computer" should have 1 cards left
+    Then "Computer" should have 1 cards left
     And the accumulated penalty should be 6
 
   Scenario: Turn timer expires and forces an auto-draw
@@ -192,7 +192,7 @@ Feature: Advanced Gameplay Mechanics
 
   Scenario: The lobby resets when the last human player disconnects
     Given a lobby has only one player "Alice"
-    And "🤖 Computer" is in the lobby
+    And "Computer" is in the lobby
     When "Alice" disconnects from the lobby
     Then the lobby should automatically reset
     And the lobby should have 0 players

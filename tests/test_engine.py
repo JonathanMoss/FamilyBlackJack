@@ -739,11 +739,11 @@ def test_bot_logic_plays_ace_and_declares_suit():
     import app
     
     game = FamilyBlackjackEngine()
-    game.players = ['Alice', '🤖 Bot 1']
+    game.players = ['Alice', 'Bot 1']
     game.is_started = True
     game.hands = {
         'Alice': [{'suit': 'Spades', 'value': 'King'}],
-        '🤖 Bot 1': [
+        'Bot 1': [
             {'suit': 'Hearts', 'value': 'Ace'},
             {'suit': 'Clubs', 'value': '2'},
             {'suit': 'Clubs', 'value': '4'}
@@ -753,10 +753,10 @@ def test_bot_logic_plays_ace_and_declares_suit():
     game.current_turn_index = 1
     
     app.game = game
-    app.run_bot_logic('🤖 Bot 1')
+    app.run_bot_logic('Bot 1')
     
     # Bot should have played the Ace
-    assert len(game.hands['🤖 Bot 1']) == 2
+    assert len(game.hands['Bot 1']) == 2
     # It should have declared the most common suit in hand (Clubs)
     assert game.declared_ace_suit == 'Clubs'
     assert game.current_turn_index == 0
@@ -773,14 +773,14 @@ def test_handle_add_bot_generates_unique_names(monkeypatch):
     monkeypatch.setattr(app.request, 'sid', 'fake_sid')
     
     app.handle_add_bot()
-    assert sum(1 for p in game.players if p.startswith('🤖')) == 1
+    assert sum(1 for p in game.players if game.is_bot(p)) == 1
     
     app.handle_add_bot()
-    assert sum(1 for p in game.players if p.startswith('🤖')) == 2
+    assert sum(1 for p in game.players if game.is_bot(p)) == 2
     assert len(game.players) == 3
     
     app.handle_add_bot()
-    assert sum(1 for p in game.players if p.startswith('🤖')) == 3
+    assert sum(1 for p in game.players if game.is_bot(p)) == 3
     assert len(game.players) == 4
 
     emitted = []
@@ -834,11 +834,11 @@ def test_bot_logic_draws_fallback_if_play_fails(monkeypatch):
     import app
     
     game = FamilyBlackjackEngine()
-    game.players = ['Alice', '🤖 Bot 1']
+    game.players = ['Alice', 'Bot 1']
     game.is_started = True
     game.hands = {
         'Alice': [{'suit': 'Spades', 'value': 'King'}],
-        '🤖 Bot 1': [{'suit': 'Spades', 'value': '5'}]
+        'Bot 1': [{'suit': 'Spades', 'value': '5'}]
     }
     game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
     game.current_turn_index = 1
@@ -850,10 +850,10 @@ def test_bot_logic_draws_fallback_if_play_fails(monkeypatch):
     monkeypatch.setattr(game, 'validate_and_play_move', mock_validate)
     
     app.game = game
-    app.run_bot_logic('🤖 Bot 1')
+    app.run_bot_logic('Bot 1')
     
     # Bot should have drawn a card and advanced turn
-    assert len(game.hands['🤖 Bot 1']) == 2
+    assert len(game.hands['Bot 1']) == 2
     assert game.current_turn_index == 0
 
 
@@ -861,16 +861,16 @@ def test_bot_logic_plays_joker_and_reverses_direction(monkeypatch):
     import app
     
     game = FamilyBlackjackEngine()
-    game.players = ['Alice', '🤖 Bot 1', 'Charlie']
+    game.players = ['Alice', 'Bot 1', 'Charlie']
     game.is_started = True
     game.hands = {
         'Alice': [{'suit': 'Spades', 'value': 'King'}],
-        '🤖 Bot 1': [{'suit': 'Spades', 'value': '5'}, {'suit': 'Hearts', 'value': '2'}],
+        'Bot 1': [{'suit': 'Spades', 'value': '5'}, {'suit': 'Hearts', 'value': '2'}],
         'Charlie': [{'suit': 'Spades', 'value': '4'}]
     }
     game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
     game.current_turn_index = 1
-    game.jokers_available = {'🤖 Bot 1': True}
+    game.jokers_available = {'Bot 1': True}
     game.joker_cooldown = 0
     game.direction = 1
     game.deck = [{'suit': 'Clubs', 'value': '3'}] # Ensure fallback draw has a card
@@ -879,10 +879,10 @@ def test_bot_logic_plays_joker_and_reverses_direction(monkeypatch):
     monkeypatch.setattr('random.random', lambda: 0.1)
     
     app.game = game
-    app.run_bot_logic('🤖 Bot 1')
+    app.run_bot_logic('Bot 1')
     
     assert game.direction == -1
-    assert not game.jokers_available['🤖 Bot 1']
+    assert not game.jokers_available['Bot 1']
     assert game.joker_cooldown == 2
     assert game.current_turn_index == 0
 
@@ -891,12 +891,12 @@ def test_multiple_bots_joker_cooldown_ordering(monkeypatch):
     import app
     
     game = FamilyBlackjackEngine()
-    game.players = ['Alice', '🤖 Bot 1', '🤖 Bot 2']
+    game.players = ['Alice', 'Bot 1', 'Bot 2']
     game.is_started = True
     game.hands = {
         'Alice': [{'suit': 'Spades', 'value': 'King'}],
-        '🤖 Bot 1': [{'suit': 'Spades', 'value': '8'}, {'suit': 'Hearts', 'value': '2'}],
-        '🤖 Bot 2': [{'suit': 'Clubs', 'value': '7'}, {'suit': 'Clubs', 'value': '2'}]
+        'Bot 1': [{'suit': 'Spades', 'value': '8'}, {'suit': 'Hearts', 'value': '2'}],
+        'Bot 2': [{'suit': 'Clubs', 'value': '7'}, {'suit': 'Clubs', 'value': '2'}]
     }
     game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
     game.current_turn_index = 1
@@ -912,72 +912,72 @@ def test_multiple_bots_joker_cooldown_ordering(monkeypatch):
     # Turn 1: Bot 1 plays Joker (cooldown 3, dir -1). Then plays 8 (skips 1, steps=2).
     # Current index (1) + 2*(-1) = -1 -> 2 (Bot 2)
     # Cooldown decrements by 2 -> 1
-    app.run_bot_logic('🤖 Bot 1')
+    app.run_bot_logic('Bot 1')
     
     assert game.direction == -1
     assert game.current_turn_index == 2
     assert game.joker_cooldown == 1
     
     # Turn 2: Bot 2 cannot play Joker due to cooldown=1
-    app.run_bot_logic('🤖 Bot 2')
+    app.run_bot_logic('Bot 2')
     
     assert game.current_turn_index == 1
     assert game.joker_cooldown == 0
-    assert game.jokers_available['🤖 Bot 2'] is True
+    assert game.jokers_available['Bot 2'] is True
 
 def test_clear_bots_if_humans_removes_bots_when_humans_present():
     game = FamilyBlackjackEngine()
-    game.players = ['Alice', '🤖 Bot 1', 'Bob', '🤖 Bot 2']
-    game.hands = {'Alice': [], '🤖 Bot 1': [], 'Bob': [], '🤖 Bot 2': []}
+    game.players = ['Alice', 'Bot 1', 'Bob', 'Bot 2']
+    game.hands = {'Alice': [], 'Bot 1': [], 'Bob': [], 'Bot 2': []}
     
     game.clear_bots_if_humans()
     
     assert game.players == ['Alice', 'Bob']
-    assert '🤖 Bot 1' not in game.hands
-    assert '🤖 Bot 2' not in game.hands
+    assert 'Bot 1' not in game.hands
+    assert 'Bot 2' not in game.hands
     assert 'Alice' in game.hands
     assert 'Bob' in game.hands
 
 def test_clear_bots_if_humans_keeps_bots_when_no_humans():
     game = FamilyBlackjackEngine()
-    game.players = ['🤖 Bot 1', '🤖 Bot 2']
-    game.hands = {'🤖 Bot 1': [], '🤖 Bot 2': []}
+    game.players = ['Bot 1', 'Bot 2']
+    game.hands = {'Bot 1': [], 'Bot 2': []}
     
     game.clear_bots_if_humans()
     
-    assert game.players == ['🤖 Bot 1', '🤖 Bot 2']
-    assert '🤖 Bot 1' in game.hands
-    assert '🤖 Bot 2' in game.hands
+    assert game.players == ['Bot 1', 'Bot 2']
+    assert 'Bot 1' in game.hands
+    assert 'Bot 2' in game.hands
 
 def test_bot_logic_game_over_clears_bots_if_humans(monkeypatch):
     import app
     
     game = FamilyBlackjackEngine()
-    game.players = ['Alice', '🤖 Bot 1']
+    game.players = ['Alice', 'Bot 1']
     game.is_started = True
     game.hands = {
         'Alice': [{'suit': 'Spades', 'value': 'King'}],
-        '🤖 Bot 1': [{'suit': 'Spades', 'value': '5'}]
+        'Bot 1': [{'suit': 'Spades', 'value': '5'}]
     }
     game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
     game.current_turn_index = 1
     
     app.game = game
-    app.run_bot_logic('🤖 Bot 1')
+    app.run_bot_logic('Bot 1')
     
     assert game.is_started is False
-    assert '🤖 Bot 1' not in game.players
+    assert 'Bot 1' not in game.players
     assert 'Alice' in game.players
 
 def test_handle_play_game_over_clears_bots_if_humans(monkeypatch):
     import app
     
     game = FamilyBlackjackEngine()
-    game.players = ['Alice', '🤖 Bot 1']
+    game.players = ['Alice', 'Bot 1']
     game.is_started = True
     game.hands = {
         'Alice': [{'suit': 'Spades', 'value': '5'}],
-        '🤖 Bot 1': [{'suit': 'Hearts', 'value': 'King'}]
+        'Bot 1': [{'suit': 'Hearts', 'value': 'King'}]
     }
     game.discard_pile = [{'suit': 'Spades', 'value': '10'}]
     game.current_turn_index = 0
@@ -990,7 +990,7 @@ def test_handle_play_game_over_clears_bots_if_humans(monkeypatch):
     app.handle_play({'cards': [{'suit': 'Spades', 'value': '5'}]})
     
     assert game.is_started is False
-    assert '🤖 Bot 1' not in game.players
+    assert 'Bot 1' not in game.players
     assert 'Alice' in game.players
 
 def test_actions_blocked_while_paused(monkeypatch):

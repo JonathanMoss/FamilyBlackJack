@@ -153,7 +153,7 @@ def game_with_players(engine, players):
 
     engine.players = player_names_list
     for p in engine.players:
-        if not p.startswith('🤖'):
+        if not engine.is_bot(p):
             sid = f"fake_sid_{p}"
             engine.sid_to_name[sid] = p
             engine.name_to_sid[p] = sid
@@ -184,7 +184,7 @@ def set_turn(game, name):
 def solo_lobby_setup(engine, name, monkeypatch):
     cleaned_name = clean(name)
     engine.players = [cleaned_name]
-    if not cleaned_name.startswith('🤖'):
+    if not engine.is_bot(cleaned_name):
         sid = f"fake_sid_{cleaned_name}"
         engine.sid_to_name[sid] = cleaned_name
         engine.name_to_sid[cleaned_name] = sid
@@ -384,7 +384,7 @@ def time_passes(game, count):
 def lobby_setup(engine, p1, p2, p3):
     engine.players = [clean(p1), clean(p2), clean(p3)]
     for p in engine.players:
-        if not p.startswith('🤖'):
+        if not engine.is_bot(p):
             sid = f"fake_sid_{p}"
             engine.sid_to_name[sid] = p
             engine.name_to_sid[p] = sid

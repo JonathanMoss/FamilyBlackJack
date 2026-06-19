@@ -445,9 +445,9 @@ socket.on('state_update', (state) => {
 
         if (isPenalized) row.classList.add('penalty-target');
 
-        const avatar = (state.avatars && state.avatars[p]) ? state.avatars[p] : (p.startsWith('🤖') ? '🤖' : '👤');
+        const avatar = (state.avatars && state.avatars[p]) ? state.avatars[p] : ((state.bots && state.bots.includes(p)) ? '🤖' : '👤');
         const isMe = p === clientName;
-        const isBot = p.startsWith('🤖');
+        const isBot = state.bots && state.bots.includes(p);
         let avatarCursor = 'class="player-avatar"';
         if (isMe) {
             avatarCursor = 'style="cursor:pointer;" title="Click to change avatar" class="player-avatar interactive-avatar"';

@@ -1,6 +1,13 @@
-"""Browser integration tests for Family Blackjack frontend using Playwright."""
-
+import pytest
+import time
 from playwright.sync_api import Page, expect
+
+@pytest.fixture(autouse=True)
+def clean_lobby_between_tests(page: Page, live_server):
+    page.goto(f"{live_server}/test-reset")
+    yield
+    page.goto(f"{live_server}/test-reset")
+    time.sleep(0.1)
 
 def test_lobby_join(live_server, page: Page):
     """Test that a player can join the lobby and appears in the players list."""
