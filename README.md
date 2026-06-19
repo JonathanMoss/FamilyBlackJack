@@ -70,3 +70,33 @@ You can easily set up and run Family Blackjack locally either by using Docker or
    python app.py
    ```
 6. Open your web browser and navigate to `http://localhost:5000`.
+
+---
+
+## 🧪 Running Tests
+
+Family Blackjack includes both backend game engine unit/BDD tests and frontend browser-based end-to-end (E2E) integration tests.
+
+### 1. Prerequisites (For Browser Tests)
+The browser integration tests use **Playwright** to interact with a headless Chromium instance. Before running them for the first time, you must install the required browser binaries:
+```bash
+# Make sure your virtual environment is active
+playwright install chromium
+```
+
+### 2. Running All Tests
+To run both the backend unit/BDD tests and the frontend browser tests:
+```bash
+PYTHONPATH=. pytest
+```
+
+### 3. Running Specific Tests
+- **Run only the browser integration tests:**
+  ```bash
+  PYTHONPATH=. pytest tests/test_browser.py
+  ```
+- **Run only the backend engine unit & BDD tests:**
+  ```bash
+  PYTHONPATH=. pytest tests/ --ignore=tests/test_browser.py
+  ```
+
