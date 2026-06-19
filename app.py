@@ -8,6 +8,7 @@ and career stats persistence.
 # pylint: disable=inconsistent-return-statements
 
 import random
+import re
 import time
 # pylint: disable=import-error
 from flask import Flask, render_template, request, session, redirect, url_for
@@ -79,14 +80,16 @@ def modals_snippet():
 @socketio.on('join_game')
 def handle_join(data):
     """Handle connection routing for entry registration tasks."""
-    import re
     sid = request.sid
     name = data.get('name', '').strip()
     if not name:
         return emit('error', {'msg': 'Name cannot be blank.'})
     if not re.match(r'^[a-zA-Z0-9 _-]{1,20}$', name):
         return emit('error', {
-            'msg': 'Name must be 1-20 characters, containing only letters, numbers, spaces, hyphens, or underscores.'
+            'msg': (
+                'Name must be 1-20 characters, containing only letters, '
+                'numbers, spaces, hyphens, or underscores.'
+            )
         })
 
     session['username'] = name
@@ -180,7 +183,7 @@ def _handle_game_over(winner_name):
                 player_colors=player_colors
             )
     except Exception as e:  # pylint: disable=broad-except
-        app.logger.error(f"Failed to render game_over.html: {e}")
+        app.logger.error("Failed to render game_over.html: %s", e)
         html_content = f"<h2>Winner: {winner_name}!</h2><p>Game Over!</p>"
 
     game.clear_bots_if_humans()
@@ -665,7 +668,9 @@ def handle_play(data):
                     for _ in range(skips):
                         skipped_player = game.get_current_player_name()
                         socketio.emit(
-                            'game_log', {'msg': f"🚫 {skipped_player} misses a turn!"}, room='game_room'
+                            'game_log',
+                            {'msg': f"🚫 {skipped_player} misses a turn!"},
+                            room='game_room'
                         )
                         broadcast_state()
                         socketio.sleep(2.0)
@@ -923,7 +928,7 @@ def broadcast_state():
                 player_colors=player_colors
             )
     except Exception as e:  # pylint: disable=broad-except
-        app.logger.error(f"Failed to render league_table.html: {e}")
+        app.logger.error("Failed to render league_table.html: %s", e)
         league_html = "<tr><td colspan='3'>Scoreboard offline.</td></tr>"
 
     state = {

@@ -38,7 +38,7 @@ def calculate_penalty_update(card, current_type, current_accumulated, player_nam
     return new_type, new_accumulated, new_source
 
 
-# pylint: disable=too-many-arguments, too-many-locals
+# pylint: disable=too-many-arguments, too-many-locals, too-many-positional-arguments
 def validate_move(
     matched_cards, top_card, active_suit, active_penalty_type,
     accumulated_penalty, penalty_source, player_name
@@ -50,7 +50,7 @@ def validate_move(
     last_card = matched_cards[-1]
     last_is_bj = (last_card['value'] == 'Jack' and last_card['suit'] in ['Spades', 'Clubs'])
     last_is_rj = (last_card['value'] == 'Jack' and last_card['suit'] in ['Hearts', 'Diamonds'])
-    last_is_two = (last_card['value'] == '2')
+    last_is_two = last_card['value'] == '2'
 
     if accumulated_penalty > 0:
         if active_penalty_type == '2' and not last_is_two:

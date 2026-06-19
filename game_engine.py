@@ -116,7 +116,7 @@ class FamilyBlackjackEngine:
         self.joker_cooldown = 0
         self.host_name = None
 
-    def build_deck(self):  # pylint: disable=no-self-use
+    def build_deck(self):
         """Construct a fresh 52-card deck array and shuffle it.
 
         Returns:
