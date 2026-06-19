@@ -79,10 +79,15 @@ def modals_snippet():
 @socketio.on('join_game')
 def handle_join(data):
     """Handle connection routing for entry registration tasks."""
+    import re
     sid = request.sid
     name = data.get('name', '').strip()
     if not name:
         return emit('error', {'msg': 'Name cannot be blank.'})
+    if not re.match(r'^[a-zA-Z0-9 _-]{1,20}$', name):
+        return emit('error', {
+            'msg': 'Name must be 1-20 characters, containing only letters, numbers, spaces, hyphens, or underscores.'
+        })
 
     session['username'] = name
 

@@ -6,6 +6,16 @@ let lastPenalized = { name: null, amount: 0 };
 let spectatorHandsData = null;
 let isDemoMode = false;
 
+function escapeHTML(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Web Audio API context for synthesized game sounds
 let audioCtx = null;
 function initAudio() {
@@ -159,18 +169,7 @@ function evaluateButtonAbilities() {
         drawBtn.innerText = (globalState.penalty > 0) ? `Take Penalty (+${globalState.penalty})` : "Draw Card";
     }
 
-    // Dynamically inject the Joker button if it does not exist
-    let jokerBtn = document.getElementById('joker-btn');
-    if (!jokerBtn) {
-        jokerBtn = document.createElement('button');
-        jokerBtn.id = 'joker-btn';
-        jokerBtn.onclick = () => socket.emit('play_joker');
-        
-        const drawBtn = document.getElementById('action-draw-btn');
-        if (drawBtn && drawBtn.parentNode) {
-            drawBtn.parentNode.insertBefore(jokerBtn, drawBtn.nextSibling);
-        }
-    }
+    const jokerBtn = document.getElementById('joker-btn');
     
     // Evaluate the Joker status and cooldown states
     const hasJoker = globalState.jokers_available && globalState.jokers_available[clientName];
@@ -186,7 +185,7 @@ function evaluateButtonAbilities() {
     }
     const isTwoPlayer = activePlayerCount <= 2;
     
-    if (globalState.is_started) {
+    if (globalState.is_started && jokerBtn) {
         jokerBtn.style.display = 'inline-block';
         if (isTwoPlayer) {
             jokerBtn.disabled = true;
@@ -204,8 +203,8 @@ function evaluateButtonAbilities() {
             jokerBtn.disabled = false;
             jokerBtn.innerText = `🃏 Play Joker`;
         }
-    } else {
-        if (jokerBtn) jokerBtn.style.display = 'none';
+    } else if (jokerBtn) {
+        jokerBtn.style.display = 'none';
     }
 }
 
@@ -240,18 +239,10 @@ socket.on('state_update', (state) => {
         document.getElementById('lobby-controls').style.display = 'none';
     } else if (isJoined) {
         document.getElementById('lobby-controls').style.display = 'block';
-        let addBotBtn = document.getElementById('add-bot-btn');
-        if (!addBotBtn) {
-            addBotBtn = document.createElement('button');
-            addBotBtn.id = 'add-bot-btn';
-            addBotBtn.className = 'btn-lobby';
-            addBotBtn.innerText = '🤖 Add Bot';
-            addBotBtn.onclick = () => socket.emit('add_bot');
-            document.getElementById('lobby-controls').appendChild(addBotBtn);
-        }
-
-        let startGameBtn = document.getElementById('start-game-btn');
-        let shufflePlayersBtn = document.getElementById('shuffle-players-btn');
+        const addBotBtn = document.getElementById('add-bot-btn');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const shufflePlayersBtn = document.getElementById('shuffle-players-btn');
+        
         if (isDemoMode) {
             if (startGameBtn) startGameBtn.style.display = 'none';
             if (addBotBtn) addBotBtn.style.display = 'none';
@@ -330,12 +321,12 @@ socket.on('state_update', (state) => {
     if (window.turnWarningTimeout) clearTimeout(window.turnWarningTimeout);
 
     if (!state.is_started) {
-        statusDot.style.background = '#dc3545'; // Dead/Idle Red
+        statusDot.className = 'status-dot idle';
         turnContainer.classList.remove('my-turn');
         turnMessage.innerHTML = `⏳ <span>Lobby waiting to start...</span>`;
         document.getElementById('turn-timer').style.width = '100%';
     } else {
-        statusDot.style.background = '#00ff66'; // Glowing Live Emerald Green
+        statusDot.className = 'status-dot live';
         
         const myHandSize = state.hand_sizes[clientName] || 0;
         const isSpectator = myHandSize === 0;
@@ -359,7 +350,7 @@ socket.on('state_update', (state) => {
             turnMessage.innerHTML = `⚔️ <span><b>YOUR TURN!</b> Play your hand.</span>`;
         } else {
             turnContainer.classList.remove('my-turn');
-            turnMessage.innerHTML = `👤 <span>Action on <b>${state.current_player}</b></span>`;
+            turnMessage.innerHTML = `👤 <span>Action on <b>${escapeHTML(state.current_player)}</b></span>`;
         }
 
         if (!isSpectator && timerBar && state.turn_start_time) {
@@ -435,8 +426,9 @@ socket.on('state_update', (state) => {
         row.className = 'player-row';
         if(state.is_started && state.current_player === p) row.classList.add('active-turn');
 
+        const escapedP = escapeHTML(p);
         const cardCount = state.hand_sizes[p] || 0;
-        let pLabel = (p === clientName) ? `<b>${p} (You)</b>` : p;
+        let pLabel = (p === clientName) ? `<b>${escapedP} (You)</b>` : escapedP;
 
         const isSpectating = state.is_started && cardCount === 0;
         const statusText = isSpectating ? '👁️ Spectating' : `🃏 (${cardCount} left)`;
@@ -445,7 +437,7 @@ socket.on('state_update', (state) => {
         const lastIcon = isLast ? `<span class="last-card-icon" title="Last Card">🔥</span>` : '';
         const hostIcon = (p === state.host_name) ? `<span title="Host" style="margin-right: 5px;">👑</span>` : '';
 
-        const rightControls = (p !== clientName && state.is_started) ? `<button class="nudge-btn" onclick="triggerNudge('${p}')">⏰</button>` : '';
+        const rightControls = (p !== clientName && state.is_started) ? `<button class="nudge-btn" data-target="${escapedP}">⏰</button>` : '';
 
         // If there's an active penalty, highlight the current_player as the penalty target
         const isPenalized = state.penalty > 0 && state.current_player === p;
@@ -789,6 +781,8 @@ function initLobbyVisuals() {
     bind('sort-hand-btn', () => organizeHand('sort'));
     bind('play-btn', playSelected);
     bind('action-draw-btn', drawOrResolve);
+    bind('add-bot-btn', () => socket.emit('add_bot'));
+    bind('joker-btn', () => socket.emit('play_joker'));
 
     // Add Enter key support for the username input field
     const nameInput = document.getElementById('username');
@@ -861,8 +855,9 @@ socket.on('received_cards', (data) => {
     const reason = data.reason || '';
     const isPenalty = reason && reason.indexOf('penalty') !== -1;
     const source = data.source || null;
+    const escapedSource = escapeHTML(source);
     const msg = isPenalty
-        ? (source ? `You received ${count} penalty card(s) from ${source}.` : `You received ${count} penalty card(s).`)
+        ? (escapedSource ? `You received ${count} penalty card(s) from ${escapedSource}.` : `You received ${count} penalty card(s).`)
         : `You received ${count} card(s).`;
 
     soundEffect('draw');
