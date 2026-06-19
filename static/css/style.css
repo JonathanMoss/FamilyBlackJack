@@ -618,3 +618,19 @@ button:disabled { background: #4a544c !important; color: #888 !important; cursor
 .awards-section > div:nth-child(4) { animation-delay: 0.9s; }
 .awards-section > div:nth-child(5) { animation-delay: 1.2s; }
 .awards-section > div:nth-child(6) { animation-delay: 1.5s; }
+
+/* Lobby status dot styles */
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+.status-dot.idle {
+    background-color: #dc3545;
+}
+.status-dot.live {
+    background-color: #00ff66;
+    box-shadow: 0 0 8px #00ff66;
+}
