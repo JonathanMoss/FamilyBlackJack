@@ -1,0 +1,5 @@
+[MASTER]
+init-hook="import sys; sys.path.append('.')"
+
+[BASIC]
+module-rgx=^[a-zA-Z0-9_]+$
