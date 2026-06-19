@@ -54,6 +54,7 @@ class FamilyBlackjackEngine:
         self.joker_cooldown = 0
 
         self.socketio = None
+        self.cached_league_html = None
 
     def set_socketio(self, socketio_instance):
         """Inject a SocketIO instance for decoupled event emitting."""
@@ -86,6 +87,7 @@ class FamilyBlackjackEngine:
         self.jokers_available = {}
         self.joker_cooldown = 0
         self.host_name = None
+        self.cached_league_html = None
         # Note: We intentionally DO NOT clear league_wins or league_losses
         # so career family stats persist across separate game room lobbies!
 
@@ -115,6 +117,7 @@ class FamilyBlackjackEngine:
         self.jokers_available = {}
         self.joker_cooldown = 0
         self.host_name = None
+        self.cached_league_html = None
 
     def build_deck(self):
         """Construct a fresh 52-card deck array and shuffle it.
