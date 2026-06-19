@@ -50,3 +50,29 @@ def test_add_bot(live_server, page: Page):
 
     # Verify player list contains the bot emoji prefix
     expect(page.locator("#player-list-box")).to_contain_text("🤖")
+
+def test_game_start_and_draw(live_server, page: Page):
+    """Test starting the game, verifying hand cards are dealt, and drawing a card."""
+    page.goto(live_server)
+
+    # Join the lobby
+    page.fill("#username", "Alice")
+    page.click("#join-btn")
+
+    # Verify lobby controls are visible and click Start Game
+    expect(page.locator("#start-game-btn")).to_be_visible()
+    page.click("#start-game-btn")
+
+    # Wait for the game to start and populate player's hand (should be 7 cards)
+    hand_cards = page.locator("#my-hand .card")
+    expect(hand_cards).to_have_count(7)
+
+    # Verify that the draw card button is visible
+    draw_btn = page.locator("#action-draw-btn")
+    expect(draw_btn).to_be_visible()
+
+    # Click the draw card button to draw a card
+    page.click("#action-draw-btn")
+
+    # After drawing a card, the hand size should increase to 8
+    expect(hand_cards).to_have_count(8)
