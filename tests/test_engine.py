@@ -1107,3 +1107,40 @@ def test_handle_play_final_card_triggers_game_over_rather_than_penalty_or_skip(m
     assert len(sleeps) == 0
     assert game.is_started is False
     assert any(ev == 'game_over' for ev, data in emitted)
+
+
+def test_stats_file_persistence_lifecycle(tmp_path):
+    """Test that stats file is created, updated with dummy data, and persists correctly."""
+    import json
+    temp_file = tmp_path / "test_stats.json"
+
+    # 1. Initialization creates the file if not present
+    game = FamilyBlackjackEngine(stats_file_path=str(temp_file))
+    assert temp_file.exists()
+
+    # 2. Check initialized content
+    with open(temp_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    assert data == {'wins': {}, 'losses': {}}
+
+    # 3. Simulate updating results
+    game.players = ['Alice', 'Bob']
+    game.register_league_player('Alice')
+    game.register_league_player('Bob')
+    game.update_league_results('Alice')
+
+    # 4. Verify dummy data is written to disk
+    with open(temp_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    assert data['wins']['Alice'] == 1
+    assert data['losses']['Bob'] == 1
+
+    # 5. Load in a new engine instance to verify reloading works
+    new_game = FamilyBlackjackEngine(stats_file_path=str(temp_file))
+    assert new_game.league_wins['Alice'] == 1
+    assert new_game.league_losses['Bob'] == 1
+
+    # 6. Cleanup (delete the file when finished)
+    temp_file.unlink()
+    assert not temp_file.exists()
+
