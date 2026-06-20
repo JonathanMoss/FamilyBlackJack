@@ -65,7 +65,8 @@ class FamilyBlackjackEngine:
         self.socketio = None
         self.cached_league_html = None
         self.timer_session_id = 0
-        self.stats_file_path = None if ('pytest' in sys.modules or 'unittest' in sys.modules) else STATS_FILE_PATH
+        is_testing = 'pytest' in sys.modules or 'unittest' in sys.modules
+        self.stats_file_path = None if is_testing else STATS_FILE_PATH
         self._load_stats()
 
     def _save_stats(self):
@@ -79,7 +80,7 @@ class FamilyBlackjackEngine:
             }
             with open(self.stats_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             print(f"Failed to save stats to {self.stats_file_path}: {e}")
 
     def _load_stats(self):
@@ -92,7 +93,7 @@ class FamilyBlackjackEngine:
                     data = json.load(f)
                 self.league_wins = data.get('wins', {})
                 self.league_losses = data.get('losses', {})
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 print(f"Failed to load stats from {self.stats_file_path}: {e}")
 
     def set_socketio(self, socketio_instance):
@@ -200,10 +201,11 @@ class FamilyBlackjackEngine:
             return False
         if name in self.bots:
             return True
-        # Backward compatibility for existing tests and rosters (avoiding substring matching 'Bot' in name)
-        if (name == BOT_NAME or 
-                name in BOT_ROSTER or 
-                name.startswith('🤖') or 
+        # Backward compatibility for existing tests and rosters
+        # (avoiding substring matching 'Bot' in name)
+        if (name == BOT_NAME or
+                name in BOT_ROSTER or
+                name.startswith('🤖') or
                 re.match(r'^Bot \d+$', name)):
             return True
         return False
@@ -211,9 +213,9 @@ class FamilyBlackjackEngine:
     def add_player(self, name):
         """Register a new player in the lobby and manage bot yield logic."""
         if name not in self.players:
-            if (name == BOT_NAME or 
-                    name in BOT_ROSTER or 
-                    name.startswith('🤖') or 
+            if (name == BOT_NAME or
+                    name in BOT_ROSTER or
+                    name.startswith('🤖') or
                     re.match(r'^Bot \d+$', name)):
                 self.bots.add(name)
             self.players.append(name)
