@@ -3,7 +3,11 @@
 # pylint: disable=too-many-lines, invalid-name, too-many-locals, too-many-branches, too-many-statements
 # pylint: disable=inconsistent-return-statements
 
+import json
+import os
 import random
+import re
+import sys
 import time
 
 import rule_engine
@@ -13,6 +17,9 @@ BOT_ROSTER = [
     "HAL 9000", "The Architect", "KITT", "V'ger",
     "Ash", "R2-D2", "C3-PO"
 ]
+
+STATS_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stats.json')
+
 
 
 
@@ -57,6 +64,36 @@ class FamilyBlackjackEngine:
 
         self.socketio = None
         self.cached_league_html = None
+        self.timer_session_id = 0
+        self.stats_file_path = None if ('pytest' in sys.modules or 'unittest' in sys.modules) else STATS_FILE_PATH
+        self._load_stats()
+
+    def _save_stats(self):
+        """Save league standings to a JSON file."""
+        if not self.stats_file_path:
+            return
+        try:
+            data = {
+                'wins': self.league_wins,
+                'losses': self.league_losses
+            }
+            with open(self.stats_file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f)
+        except Exception as e:
+            print(f"Failed to save stats to {self.stats_file_path}: {e}")
+
+    def _load_stats(self):
+        """Load league standings from a JSON file."""
+        if not self.stats_file_path:
+            return
+        if os.path.exists(self.stats_file_path):
+            try:
+                with open(self.stats_file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                self.league_wins = data.get('wins', {})
+                self.league_losses = data.get('losses', {})
+            except Exception as e:
+                print(f"Failed to load stats from {self.stats_file_path}: {e}")
 
     def set_socketio(self, socketio_instance):
         """Inject a SocketIO instance for decoupled event emitting."""
@@ -147,10 +184,15 @@ class FamilyBlackjackEngine:
         """
         if self.is_bot(name):
             return
+        updated = False
         if name not in self.league_wins:
             self.league_wins[name] = 0
+            updated = True
         if name not in self.league_losses:
             self.league_losses[name] = 0
+            updated = True
+        if updated:
+            self._save_stats()
 
     def is_bot(self, name):
         """Check if a player name belongs to an AI bot."""
@@ -158,15 +200,21 @@ class FamilyBlackjackEngine:
             return False
         if name in self.bots:
             return True
-        # Backward compatibility for existing tests and rosters
-        if name == BOT_NAME or name in BOT_ROSTER or name.startswith('🤖') or 'Bot' in name:
+        # Backward compatibility for existing tests and rosters (avoiding substring matching 'Bot' in name)
+        if (name == BOT_NAME or 
+                name in BOT_ROSTER or 
+                name.startswith('🤖') or 
+                re.match(r'^Bot \d+$', name)):
             return True
         return False
 
     def add_player(self, name):
         """Register a new player in the lobby and manage bot yield logic."""
         if name not in self.players:
-            if name == BOT_NAME or name in BOT_ROSTER or name.startswith('🤖') or 'Bot' in name:
+            if (name == BOT_NAME or 
+                    name in BOT_ROSTER or 
+                    name.startswith('🤖') or 
+                    re.match(r'^Bot \d+$', name)):
                 self.bots.add(name)
             self.players.append(name)
             self.hands[name] = []
@@ -252,6 +300,7 @@ class FamilyBlackjackEngine:
         self.current_turn_index = (self.match_dealer_index + 1) % len(self.players)
 
         self.is_started = True
+        self.timer_session_id += 1
         self._skip_spectators()
 
         if starter['value'] == '2':
@@ -420,6 +469,8 @@ class FamilyBlackjackEngine:
                 self.register_league_player(name)
                 if not self.is_bot(name):
                     self.league_losses[name] += 1
+
+        self._save_stats()
 
     # pylint: disable=too-many-return-statements
     def validate_and_play_move(self, name, selected_cards):
