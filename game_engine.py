@@ -26,7 +26,7 @@ STATS_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stat
 class FamilyBlackjackEngine:
     """Core state machine managing players, card decks, and gameplay rounds."""
 
-    def __init__(self, turn_timeout=30.0):
+    def __init__(self, turn_timeout=30.0, stats_file_path=None):
         """Initialize defaults for a fresh blackjack lobby."""
         self.players = []          # Ordered list of Unique Usernames
         self.bots = set()          # Set of bot player names
@@ -66,7 +66,9 @@ class FamilyBlackjackEngine:
         self.cached_league_html = None
         self.timer_session_id = 0
         is_testing = 'pytest' in sys.modules or 'unittest' in sys.modules
-        self.stats_file_path = None if is_testing else STATS_FILE_PATH
+        self.stats_file_path = stats_file_path if stats_file_path is not None else (
+            None if is_testing else STATS_FILE_PATH
+        )
         self._load_stats()
 
     def _save_stats(self):
@@ -87,14 +89,18 @@ class FamilyBlackjackEngine:
         """Load league standings from a JSON file."""
         if not self.stats_file_path:
             return
-        if os.path.exists(self.stats_file_path):
-            try:
-                with open(self.stats_file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                self.league_wins = data.get('wins', {})
-                self.league_losses = data.get('losses', {})
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                print(f"Failed to load stats from {self.stats_file_path}: {e}")
+        if not os.path.exists(self.stats_file_path):
+            self.league_wins = {}
+            self.league_losses = {}
+            self._save_stats()
+            return
+        try:
+            with open(self.stats_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            self.league_wins = data.get('wins', {})
+            self.league_losses = data.get('losses', {})
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            print(f"Failed to load stats from {self.stats_file_path}: {e}")
 
     def set_socketio(self, socketio_instance):
         """Inject a SocketIO instance for decoupled event emitting."""
