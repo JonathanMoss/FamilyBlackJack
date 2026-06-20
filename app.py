@@ -131,11 +131,11 @@ def handle_join(data):
     broadcast_state()
     return None
 
-def turn_timer_loop_for_match():
+def turn_timer_loop_for_match(session_id):
     """Background task to enforce the 30-second turn limit during active matches."""
-    while game.is_started:
+    while game.is_started and getattr(game, 'timer_session_id', None) == session_id:
         socketio.sleep(1)
-        if game.is_started:
+        if game.is_started and getattr(game, 'timer_session_id', None) == session_id:
             result = game.enforce_turn_timer()
             if result:
                 player_name = result['player']
@@ -536,7 +536,7 @@ def _broadcast_match_start():
         broadcast_state()
 
     check_for_bot_turn()
-    socketio.start_background_task(turn_timer_loop_for_match)
+    socketio.start_background_task(turn_timer_loop_for_match, game.timer_session_id)
 
 
 @socketio.on('start_demo')
