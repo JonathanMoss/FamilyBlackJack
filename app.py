@@ -7,6 +7,7 @@ and career stats persistence.
 # pylint: disable=too-many-lines, invalid-name, too-many-locals, too-many-branches, too-many-statements
 # pylint: disable=inconsistent-return-statements
 
+import os
 import random
 import re
 import time
@@ -16,8 +17,21 @@ from flask_socketio import SocketIO, emit, join_room
 
 from game_engine import FamilyBlackjackEngine, BOT_NAME, BOT_ROSTER
 
+# Load environment variables from .env file if present
+env_path = os.path.join(os.path.dirname(__file__), '.env')
+if os.path.exists(env_path):
+    try:
+        with open(env_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, val = line.split('=', 1)
+                    os.environ[key.strip()] = val.strip()
+    except OSError:
+        pass
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'blackjack_family_secret!'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'blackjack_family_secret!')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global instances tracking core system state mechanics

@@ -22,6 +22,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application files into the container workspace
 COPY . /app/
 
+# Run the script to generate a random secret key at build time
+RUN chmod +x generate_secret.sh && ./generate_secret.sh
+
 # Expose the internal port Flask is broadcasting on
 EXPOSE 5000
 

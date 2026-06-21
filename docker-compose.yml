@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   blackjack-game:
     build: .
@@ -10,4 +8,5 @@ services:
       - .:/app
     environment:
       - FLASK_ENV=development
+      - SECRET_KEY=${SECRET_KEY}
     restart: always
