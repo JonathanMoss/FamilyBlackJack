@@ -640,65 +640,137 @@ async function soundEffect(type) {
         }
     }
 
-    const playTone = (freq, type = 'sine', duration = 0.1, volume = 0.1) => {
+    const now = audioCtx.currentTime;
+
+    // Standard helper to play a clean tone with exponential decay
+    const playTone = (freq, type = 'sine', duration = 0.1, volume = 0.1, startTime = now) => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = type;
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         
-        const now = audioCtx.currentTime;
-        osc.frequency.setValueAtTime(freq, now);
-        gain.gain.setValueAtTime(volume, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        osc.frequency.setValueAtTime(freq, startTime);
+        gain.gain.setValueAtTime(volume, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
         
-        osc.start(now);
-        osc.stop(now + duration);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
     };
 
-    // Helper for draw sound to avoid code duplication
-    const _createAndPlayDrawSound = () => {
-        // This function is only called if audioCtx is running or successfully resumed
-        // so no need for additional audioCtx.resume() checks here.
-        const drawNow = audioCtx.currentTime;
-        const drawOsc = audioCtx.createOscillator();
-        const drawGain = audioCtx.createGain();
-        drawOsc.connect(drawGain);
-        drawGain.connect(audioCtx.destination);
-        drawOsc.frequency.setValueAtTime(400, drawNow);
-        drawOsc.frequency.exponentialRampToValueAtTime(600, drawNow + 0.1);
-        drawGain.gain.setValueAtTime(0.05, drawNow);
-        drawGain.gain.linearRampToValueAtTime(0, drawNow + 0.1);
-        drawOsc.start(drawNow);
-        drawOsc.stop(drawNow + 0.1); // Corrected 'now' to 'drawNow'
-    };
+    switch (type) {
+        case 'play': {
+            // Rapid downward frequency chirp: organic card-tap thump on a soft table
+            const duration = 0.12;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
 
-    switch(type) {
-        case 'play':
-            // Low "thump" for playing a card
-            playTone(180, 'sine', 0.15, 0.2);
+            osc.frequency.setValueAtTime(260, now);
+            osc.frequency.exponentialRampToValueAtTime(70, now + duration);
+
+            gain.gain.setValueAtTime(0.18, now);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+            osc.start(now);
+            osc.stop(now + duration);
             break;
-        case 'draw':
-            // Rising blip for drawing
-            _createAndPlayDrawSound();
-            break;
-        case 'shuffle':
-            // Rapid sequence of short "clicks"
-            for(let i=0; i<6; i++) {
-                setTimeout(() => playTone(Math.random() * 200 + 200, 'square', 0.05, 0.02), i * 60);
-            }
-            break;
-        case 'alert':
-            // High pitched double-beep
-            playTone(880, 'triangle', 0.1, 0.1);
-            setTimeout(() => playTone(880, 'triangle', 0.1, 0.1), 150);
-            break;
-        case 'winner':
-            // Simple C-Major Arpeggio (C4, E4, G4, C5)
-            [261.63, 329.63, 392.00, 523.25].forEach((f, i) => {
-                setTimeout(() => playTone(f, 'sine', 0.4, 0.1), i * 150);
+        }
+        case 'draw': {
+            // Soft paper-like slide using overlapping sine waves (a perfect fifth harmony) with upward glide
+            const duration = 0.14;
+            [440.00, 659.25].forEach((freq, idx) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.frequency.setValueAtTime(freq, now);
+                osc.frequency.exponentialRampToValueAtTime(freq * 1.15, now + duration);
+
+                gain.gain.setValueAtTime(idx === 0 ? 0.05 : 0.03, now);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+                osc.start(now);
+                osc.stop(now + duration);
             });
             break;
+        }
+        case 'shuffle': {
+            // Gentle rhythmic riffle sound using triangle wave clicks with accelerating/decelerating schedule
+            for (let i = 0; i < 9; i++) {
+                const clickTime = now + (i * 0.04) + (Math.random() * 0.008);
+                const clickDuration = 0.025;
+                const freq = 140 + (i * 18);
+                playTone(freq, 'triangle', clickDuration, 0.03, clickTime);
+            }
+            break;
+        }
+        case 'alert': {
+            // High-end double bell-chime (a clean major third E6 and G#6) with exponential ring-out
+            const duration = 0.5;
+            [1318.51, 1661.22].forEach((freq, idx) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.frequency.setValueAtTime(freq, now);
+                gain.gain.setValueAtTime(idx === 0 ? 0.04 : 0.02, now);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+                osc.start(now);
+                osc.stop(now + duration);
+            });
+            // Play a second softer chime after 120ms to make it an elegant double-ping
+            [1318.51, 1661.22].forEach((freq, idx) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.frequency.setValueAtTime(freq, now + 0.12);
+                gain.gain.setValueAtTime(idx === 0 ? 0.03 : 0.015, now + 0.12);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12 + duration);
+
+                osc.start(now + 0.12);
+                osc.stop(now + 0.12 + duration);
+            });
+            break;
+        }
+        case 'winner': {
+            // Triumphant, warm chord resolution (C-Major triad + Maj7/9 extensions) played with staggered arpeggiated entry
+            // Notes: C4 (261.63), G4 (392.00), C5 (523.25), E5 (659.25), B5 (987.77)
+            const chords = [
+                { f: 261.63, delay: 0.0 },  // C4
+                { f: 392.00, delay: 0.08 }, // G4
+                { f: 523.25, delay: 0.16 }, // C5
+                { f: 659.25, delay: 0.24 }, // E5
+                { f: 987.77, delay: 0.32 }  // B5
+            ];
+            chords.forEach(note => {
+                const noteTime = now + note.delay;
+                const duration = 0.8;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.frequency.setValueAtTime(note.f, noteTime);
+                gain.gain.setValueAtTime(0.05, noteTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, noteTime + duration);
+
+                osc.start(noteTime);
+                osc.stop(noteTime + duration);
+            });
+            break;
+        }
         case 'penalty': // Map 'penalty' from server to 'alert' sound
             await soundEffect('alert');
             break;
