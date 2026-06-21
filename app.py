@@ -54,9 +54,9 @@ def get_player_colors(players_iterable):
     colors = {}
     for p in players_iterable:
         if game.is_bot(p):
-            if p in ["R2-D2", "C3-PO"]:
+            if p in ["R2-D2", "C3-PO", "WALL-E", "Gerty"]:
                 colors[p] = '#4CAF50'  # Green for Easy
-            elif p in ["HAL 9000", "The Architect"]:
+            elif p in ["HAL 9000", "The Architect", "T-800", "WOPR", "Data"]:
                 colors[p] = '#F44336'  # Red for Hard
             else:
                 colors[p] = '#FF9800'  # Orange for Medium
@@ -243,9 +243,9 @@ def run_bot_logic(expected_bot_name):
 
     # Assign bot difficulties based on their name
     difficulty = 'medium'
-    if bot_name in ["R2-D2", "C3-PO"]:
+    if bot_name in ["R2-D2", "C3-PO", "WALL-E", "Gerty"]:
         difficulty = 'easy'
-    elif bot_name in ["HAL 9000", "The Architect"]:
+    elif bot_name in ["HAL 9000", "The Architect", "T-800", "WOPR", "Data"]:
         difficulty = 'hard'
 
     # 0. Joker Logic (chance to play if available and not on cooldown)
