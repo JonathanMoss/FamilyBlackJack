@@ -1,4 +1,10 @@
 const socket = io();
+socket.on('connect', () => {
+    const savedName = localStorage.getItem('blackjack_player_name');
+    if (savedName) {
+        socket.emit('join_game', { name: savedName });
+    }
+});
 let currentHand = [];
 let selectedCards = [];
 let globalState = {};
@@ -445,20 +451,37 @@ socket.on('state_update', (state) => {
     // Refresh Top Discard Card View layout
     if(state.top_card) {
         const frame = document.getElementById('top-card');
+        const imgPath = `/static/images/${state.top_card.value}_of_${state.top_card.suit}.png`.toLowerCase();
+        
+        // Track the latest expected top card image path to guard against race conditions
+        frame.dataset.latestImgPath = imgPath;
+
         const updateTopCard = () => {
+            if (frame.dataset.latestImgPath !== imgPath) return;
             frame.className = 'card image-card';
             if(state.top_card.suit === 'Hearts' || state.top_card.suit === 'Diamonds') frame.classList.add('red');
-            
-            const imgPath = `/static/images/${state.top_card.value}_of_${state.top_card.suit}.png`.toLowerCase();
             frame.innerHTML = `<img src="${imgPath}" class="card-img" alt="${state.top_card.value} of ${state.top_card.suit}">`;
         };
 
-        if (document.startViewTransition) {
-            frame.style.viewTransitionName = 'top-discard-card';
-            document.startViewTransition(updateTopCard);
-        } else {
-            updateTopCard();
-        }
+        const triggerTransition = () => {
+            if (frame.dataset.latestImgPath !== imgPath) return;
+
+            if (document.startViewTransition) {
+                frame.style.viewTransitionName = 'top-discard-card';
+                const transition = document.startViewTransition(updateTopCard);
+                transition.finished.finally(() => {
+                    frame.style.viewTransitionName = '';
+                });
+            } else {
+                updateTopCard();
+            }
+        };
+
+        // Preload image dynamically in memory before transitioning to prevent visual blank cards
+        const tempImg = new Image();
+        tempImg.onload = triggerTransition;
+        tempImg.onerror = triggerTransition; // Safe fallback for missing assets or testing environments
+        tempImg.src = imgPath;
 
         const suitIndicator = document.getElementById('active-suit-indicator');
         if (state.is_started) {
@@ -991,13 +1014,12 @@ function initLobbyVisuals() {
     let stopDemoBtn = document.getElementById('stop-demo-btn');
     if (stopDemoBtn) stopDemoBtn.style.display = 'none';
 
-    // Auto-join if a name was previously saved
+    // Populate username input field if a name was previously saved
     const savedName = localStorage.getItem('blackjack_player_name');
     if (savedName) {
         const nameInput = document.getElementById('username');
         if (nameInput) {
             nameInput.value = savedName;
-            socket.emit('join_game', { name: savedName });
         }
     }
     preloadCardImages();
