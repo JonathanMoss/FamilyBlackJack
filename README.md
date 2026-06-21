@@ -30,6 +30,13 @@ Certain cards completely change the dynamic of the round. Use them strategically
 * **Ace (Wild):** Aces can be played at any time, on top of any card. The player who plays the Ace gets to pause and declare the new active suit.
 * **Joker (Reverse):** Click your dedicated "Play Joker" button to reverse the turn direction (e.g., from Clockwise to Counter-Clockwise). *Note: Jokers have a cooldown timer and are disabled in 2-player games.*
 
+### 🤖 AI Bot Dialogue Personalities
+The game features computer bot opponents with different difficulty levels and distinct, contextual dialogue logs (chatting) that display in the events log:
+* **Easy Bots** (e.g., **R2-D2**, **C3-PO**, **WALL-E**, **Gerty**): Friendly, apologetic, and speak in robotic bleeps or polite warnings.
+* **Medium Bots** (e.g., **Bender**, **J.A.R.V.I.S.**, **KITT**, **Ash**): Helpful assistant tones or sassy, sarcastic trash-talk.
+* **Hard Bots** (e.g., **HAL 9000**, **The Architect**, **T-800**, **WOPR**, **Data**): Calculating, highly logical, cold sci-fi quotes, and focus on absolute tactical victory.
+* **Interactive Reactions**: Bots will chat in the live game events log when they play, draw, nudge you back, win, or lose a match.
+
 ### ⏱️ Additional Game Mechanics
 - **30-Second Turn Timer:** Don't take too long! You have exactly 30 seconds to make your move. If the timer expires, you will automatically draw a card (or automatically draw the active penalty stack) and lose your turn.
 - **Social Nudges:** Waiting on a slowpoke? Click the ⏰ icon next to an opponent's name to send them a screen-shaking nudge!
