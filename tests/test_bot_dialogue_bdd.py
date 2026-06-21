@@ -57,8 +57,8 @@ def set_turn(game_setup, player_name):
 def bot_plays_card(game_setup, bot_name, monkeypatch, event_catcher):
     # Mock to make bot execution run synchronously and cleanly
     monkeypatch.setattr(game_setup, 'validate_and_play_move', lambda name, play: (True, "success", 0))
-    game_setup.hands = {bot_name: [{'value': '5', 'suit': 'Clubs'}]}
-    game_setup.discard_pile = [{'value': '5', 'suit': 'Hearts'}]
+    game_setup.hands = {bot_name: [{'value': '8', 'suit': 'Clubs'}]}
+    game_setup.discard_pile = [{'value': '8', 'suit': 'Hearts'}]
     
     # Run the bot logic loop for playing cards
     app.run_bot_logic(bot_name)

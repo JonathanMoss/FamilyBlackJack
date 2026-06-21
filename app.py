@@ -331,15 +331,27 @@ def run_bot_logic(expected_bot_name):
             )
 
             is_attack = any(c['value'] in ['2', 'Jack'] for c in possible_play)
-            dialogue = game.get_bot_dialogue(
-                bot_name, 'play_attack_card' if is_attack else 'play_card'
-            )
-            if dialogue:
-                socketio.emit(
-                    'game_log',
-                    {'msg': f"💬 <b>{bot_name}</b>: \"{dialogue}\""},
-                    room='game_room'
+            is_power = any(c['value'] in ['2', '8', 'Jack', 'Ace'] for c in possible_play)
+            is_multiple = len(possible_play) > 1
+            
+            should_speak = False
+            if is_power:
+                should_speak = True
+            elif is_multiple:
+                should_speak = random.random() < 0.65
+            else:
+                should_speak = random.random() < 0.20
+
+            if should_speak:
+                dialogue = game.get_bot_dialogue(
+                    bot_name, 'play_attack_card' if is_attack else 'play_card'
                 )
+                if dialogue:
+                    socketio.emit(
+                        'game_log',
+                        {'msg': f"💬 <b>{bot_name}</b>: \"{dialogue}\""},
+                        room='game_room'
+                    )
 
             socketio.emit('play_sound', {'type': 'play'}, room='game_room')
 
@@ -425,13 +437,14 @@ def run_bot_logic(expected_bot_name):
                 game.draw_card(bot_name, game.accumulated_penalty, reason='penalty_auto')
                 game.clear_penalty()
             else:
-                dialogue = game.get_bot_dialogue(bot_name, 'draw_card')
-                if dialogue:
-                    socketio.emit(
-                        'game_log',
-                        {'msg': f"💬 <b>{bot_name}</b>: \"{dialogue}\""},
-                        room='game_room'
-                    )
+                if random.random() < 0.25:
+                    dialogue = game.get_bot_dialogue(bot_name, 'draw_card')
+                    if dialogue:
+                        socketio.emit(
+                            'game_log',
+                            {'msg': f"💬 <b>{bot_name}</b>: \"{dialogue}\""},
+                            room='game_room'
+                        )
 
                 socketio.emit('game_log', {'msg': f"🎴 {bot_name} drew a card."}, room='game_room')
                 socketio.emit('play_sound', {'type': 'draw'}, room='game_room')
