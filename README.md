@@ -31,11 +31,23 @@ Certain cards completely change the dynamic of the round. Use them strategically
 * **Joker (Reverse):** Click your dedicated "Play Joker" button to reverse the turn direction (e.g., from Clockwise to Counter-Clockwise). *Note: Jokers have a cooldown timer and are disabled in 2-player games.*
 
 ### 🤖 AI Bot Dialogue Personalities
-The game features computer bot opponents with different difficulty levels and distinct, contextual dialogue logs (chatting) that display in the events log:
-* **Easy Bots** (e.g., **R2-D2**, **C3-PO**, **WALL-E**, **Gerty**): Friendly, apologetic, and speak in robotic bleeps or polite warnings.
-* **Medium Bots** (e.g., **Bender**, **J.A.R.V.I.S.**, **KITT**, **Ash**): Helpful assistant tones or sassy, sarcastic trash-talk.
-* **Hard Bots** (e.g., **HAL 9000**, **The Architect**, **T-800**, **WOPR**, **Data**): Calculating, highly logical, cold sci-fi quotes, and focus on absolute tactical victory.
-* **Interactive Reactions**: Bots will chat in the live game events log when they play, draw, nudge you back, win, or lose a match.
+
+The game features computer bot opponents with different difficulty levels and distinct, contextual dialogue logs that dynamically output to the chat and events log based on game actions (playing cards, drawing cards, taking penalties, responding to nudges, winning, or losing).
+
+| Bot Name | Difficulty / Personality | Sample Dialogue Lines |
+| :--- | :--- | :--- |
+| **R2-D2** | 🟢 Easy / Chirpy Robot | `*Beep-boop click-whistle!*` <br> `*Sad slow whistle...*` (on penalty draw) |
+| **C3-PO** | 🟢 Easy / Polite Protocol Droid | `"I do believe this card is suitable, sir!"` <br> `"Oh dear, I must draw another card."` |
+| **WALL-E** | 🟢 Easy / Curious Scavenger | `"Eee-va? ... Card!"` <br> `"Uh-oh... [Sad mechanical sigh]"` (on penalty draw) |
+| **Gerty** | 🟢 Easy / Polite Caretaker | `"I hope you are enjoying the game. I play this card."` <br> `"Everything is fine, Sam. Just calculating."` (when nudged) |
+| **J.A.R.V.I.S.** | 🟡 Medium / Helpful AI Assistant | `"Playing this card now, sir."` <br> `"Patience, sir. Running millions of scenarios."` (when nudged) |
+| **Bender** | 🟡 Medium / Sassy Trash-Talker | `"Compare your hands to mine and weep, fleshbags!"` <br> `"Bite my shiny metal card-holder!"` (on penalty draw) |
+| **HAL 9000** | 🔴 Hard / Cold & Calculating | `"This card play is completely operational."` <br> `"I am sorry, Dave. I think you know what the problem is."` |
+| **The Architect** | 🔴 Hard / Deterministic Matrix Creator | `"A deliberate play in an inevitable chain."` <br> `"Your impatience is a symptom of human limitation."` |
+| **T-800** | 🔴 Hard / Relentless Terminator | `"Card played. Tactical efficiency high."` <br> `"Damage stack accepted. Processing."` (on penalty draw) |
+| **WOPR** | 🔴 Hard / Strategic Supercomputer | `"Deploying card unit."` <br> `"A strange game. The only winning move is not to play."` |
+| **Data** | 🔴 Hard / Logical Positronic Android | `"I am playing this card, which has a 23.4% probability of success."` <br> `"I have achieved victory. I believe this emotion is called 'satisfaction'."` |
+| **Other Bots** <br>*(KITT, Ash, V'ger)* | Standard / General AI | Uses standard tactical dialogue logs such as `"Analyzing table state. Card played."` |
 
 ### ⏱️ Additional Game Mechanics
 - **30-Second Turn Timer:** Don't take too long! You have exactly 30 seconds to make your move. If the timer expires, you will automatically draw a card (or automatically draw the active penalty stack) and lose your turn.
