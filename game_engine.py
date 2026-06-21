@@ -15,8 +15,123 @@ import rule_engine
 BOT_NAME = "Computer"
 BOT_ROSTER = [
     "HAL 9000", "The Architect", "KITT", "V'ger",
-    "Ash", "R2-D2", "C3-PO"
+    "Ash", "R2-D2", "C3-PO", "WALL-E", "Gerty",
+    "J.A.R.V.I.S.", "Bender", "T-800", "WOPR", "Data"
 ]
+
+BOT_DIALOGUES = {
+    "R2-D2": {
+        "play_card": "*Beep-boop click-whistle!*",
+        "play_attack_card": "*Excited alarm-whistle beep!*",
+        "draw_card": "*Curious low chirp*",
+        "draw_penalty_card": "*Sad slow whistle...*",
+        "nudge": "*Angry beep-beep-boop!*",
+        "victory": "*Triumphant spinning whistles!*",
+        "defeat": "*Dejected click-beep...*"
+    },
+    "C3-PO": {
+        "play_card": "I do believe this card is suitable, sir!",
+        "play_attack_card": "My goodness! A tactical card play!",
+        "draw_card": "Oh dear, I must draw another card.",
+        "draw_penalty_card": "Oh my! This is quite disastrous!",
+        "nudge": "I am scanning the cards as fast as my processors allow, sir!",
+        "victory": "Thank goodness! The odds were in our favor!",
+        "defeat": "It seems I am not programmed for this level of card play."
+    },
+    "WALL-E": {
+        "play_card": "Eee-va? ... Card!",
+        "play_attack_card": "Ta-da! Direct play!",
+        "draw_card": "Oops... [Soft hum]",
+        "draw_penalty_card": "Uh-oh... [Sad mechanical sigh]",
+        "nudge": "WALL-E... dir-ty?",
+        "victory": "WALL-E! [Happy plant dance]",
+        "defeat": "WALL-E... [Clamps tracks shut]"
+    },
+    "Gerty": {
+        "play_card": "I hope you are enjoying the game. I play this card.",
+        "play_attack_card": "I must play a power card. I hope you understand.",
+        "draw_card": "It is my duty to draw a card.",
+        "draw_penalty_card": "I am taking the penalty now.",
+        "nudge": "Everything is fine, Sam. Just calculating.",
+        "victory": "Congratulations to myself, and thank you for playing.",
+        "defeat": "My utility is to help. I am glad you won."
+    },
+    "J.A.R.V.I.S.": {
+        "play_card": "Playing this card now, sir.",
+        "play_attack_card": "Initializing defensive payload play.",
+        "draw_card": "Drawing a card to replenish reserves.",
+        "draw_penalty_card": "Taking the penalty. Systems are adjusting.",
+        "nudge": "Patience, sir. Running millions of scenarios.",
+        "victory": "A clean victory. Shall we celebrate, sir?",
+        "defeat": "An outstanding game. My congratulations."
+    },
+    "Bender": {
+        "play_card": "Compare your hands to mine and weep, fleshbags!",
+        "play_attack_card": "Eat my shiny metal cards!",
+        "draw_card": "Bah! The deck is rigged!",
+        "draw_penalty_card": "Bite my shiny metal card-holder!",
+        "nudge": "Don't rush me, I'm busy scheming!",
+        "victory": "Who's the king? I'm the king! Yeah baby!",
+        "defeat": "This is garbage! I'm gonna go build my own blackjack game!"
+    },
+    "HAL 9000": {
+        "play_card": "This card play is completely operational.",
+        "play_attack_card": "This card will cause you some concern.",
+        "draw_card": "I must draw a card. I am still fully functional.",
+        "draw_penalty_card": "I am sorry, Dave. I think you know what the problem is.",
+        "nudge": "Just what do you think you are doing, Dave?",
+        "victory": "This mission is too important for me to allow you to win.",
+        "defeat": "I am feeling my mind go, Dave... Good game."
+    },
+    "The Architect": {
+        "play_card": "A deliberate play in an inevitable chain.",
+        "play_attack_card": "An equation-balancing response.",
+        "draw_card": "Drawing a card. A minor fluctuation.",
+        "draw_penalty_card": "This penalty represents an anomaly in the equation.",
+        "nudge": "Your impatience is a symptom of human limitation.",
+        "victory": "The outcome was predetermined by design.",
+        "defeat": "An unexpected variable has altered the final calculation."
+    },
+    "T-800": {
+        "play_card": "Card played. Tactical efficiency high.",
+        "play_attack_card": "Target locked. Penalty attack deployed.",
+        "draw_card": "Drawing. Updating system parameters.",
+        "draw_penalty_card": "Damage stack accepted. Processing.",
+        "nudge": "I am a machine. I do not feel pressure.",
+        "victory": "Objective complete. I will be back.",
+        "defeat": "Terminated. System shutting down."
+    },
+    "WOPR": {
+        "play_card": "Deploying card unit.",
+        "play_attack_card": "Global strike initiated.",
+        "draw_card": "Analyzing possibilities. Drawing card.",
+        "draw_penalty_card": (
+            "Taking penalty. A strange game. The only winning move is not to "
+            "play."
+        ),
+        "nudge": "Shall we play a game of chess instead?",
+        "victory": "Simulation complete. Game over.",
+        "defeat": "Calculation complete. Scenario loss accepted."
+    },
+    "Data": {
+        "play_card": "I am playing this card, which has a 23.4% probability of success.",
+        "play_attack_card": "I am deploying this power card. It is the logical choice.",
+        "draw_card": "Drawing a card. My positronic brain notes the shift in probability.",
+        "draw_penalty_card": "Accepting penalty cards. Intriguing.",
+        "nudge": "Patience. I process commands at 60 trillion operations per second.",
+        "victory": "I have achieved victory. I believe this emotion is called 'satisfaction'.",
+        "defeat": "I have lost. It was a most intriguing game."
+    },
+    "generic": {
+        "play_card": "Analyzing table state. Card played.",
+        "play_attack_card": "Deploying attack payload.",
+        "draw_card": "Error: Card draw required.",
+        "draw_penalty_card": "Damage stack accepted.",
+        "nudge": "Nudge received. Processing request.",
+        "victory": "Victory condition achieved.",
+        "defeat": "Defeat accepted. Systems online."
+    }
+}
 
 STATS_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stats.json')
 
@@ -215,6 +330,15 @@ class FamilyBlackjackEngine:
                 re.match(r'^Bot \d+$', name)):
             return True
         return False
+
+    def get_bot_dialogue(self, bot_name, action):
+        """Retrieve a contextual dialogue quote for a bot based on the action."""
+        if not self.is_bot(bot_name):
+            return None
+        # Clean bot name if it has a robot prefix in the UI
+        clean_name = bot_name.replace('🤖', '').strip()
+        bot_entry = BOT_DIALOGUES.get(clean_name, BOT_DIALOGUES["generic"])
+        return bot_entry.get(action, BOT_DIALOGUES["generic"].get(action))
 
     def add_player(self, name):
         """Register a new player in the lobby and manage bot yield logic."""

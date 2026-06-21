@@ -550,6 +550,7 @@ socket.on('game_log', (data) => {
 
 socket.on('game_over', (data) => {
     soundEffect('winner');
+    triggerConfetti();
 
     document.getElementById('game-over-text').innerHTML = data.html;
 
@@ -1014,4 +1015,53 @@ function preloadCardImages() {
     });
     const placeholder = new Image();
     placeholder.src = '/static/images/ace_of_spades.png';
+}
+
+function triggerConfetti() {
+    const duration = 3000;
+    const end = Date.now() + duration;
+    
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.top = '0';
+    container.style.left = '0';
+    container.style.width = '100vw';
+    container.style.height = '100vh';
+    container.style.pointerEvents = 'none';
+    container.style.zIndex = '9999';
+    document.body.appendChild(container);
+
+    const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
+
+    const interval = setInterval(() => {
+        if (Date.now() > end) {
+            clearInterval(interval);
+            container.remove();
+            return;
+        }
+
+        const particle = document.createElement('div');
+        particle.style.position = 'absolute';
+        particle.style.width = (Math.random() * 8 + 4) + 'px';
+        particle.style.height = (Math.random() * 12 + 6) + 'px';
+        particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        particle.style.left = (Math.random() * 100) + 'vw';
+        particle.style.top = '-20px';
+        particle.style.borderRadius = '2px';
+        particle.style.opacity = Math.random() * 0.5 + 0.5;
+        particle.style.transform = `rotate(${Math.random() * 360}deg)`;
+
+        container.appendChild(particle);
+
+        const destX = (Math.random() * 100 - 50);
+        const animation = particle.animate([
+            { top: '-20px', transform: 'rotate(0deg) translateX(0px)' },
+            { top: '105vh', transform: `rotate(${Math.random() * 720 + 360}deg) translateX(${destX}px)` }
+        ], {
+            duration: Math.random() * 2000 + 1500,
+            easing: 'ease-out'
+        });
+
+        animation.onfinish = () => particle.remove();
+    }, 25);
 }
