@@ -211,6 +211,18 @@ def _handle_game_over(winner_name):
         app.logger.error("Failed to render game_over.html: %s", e)
         html_content = f"<h2>Winner: {winner_name}!</h2><p>Game Over!</p>"
 
+    # Emit dialogue reactions for all bots in the lobby
+    for player in game.players:
+        if game.is_bot(player):
+            action = 'victory' if player == winner_name else 'defeat'
+            dialogue = game.get_bot_dialogue(player, action)
+            if dialogue:
+                socketio.emit(
+                    'game_log',
+                    {'msg': f"💬 <b>{player}</b>: \"{dialogue}\""},
+                    room='game_room'
+                )
+
     game.clear_bots_if_humans()
     socketio.emit(
         'game_over',
@@ -318,6 +330,17 @@ def run_bot_logic(expected_bot_name):
                     'msg': f"📝 {bot_name} played : {cards_desc}"}, room='game_room'
             )
 
+            is_attack = any(c['value'] in ['2', 'Jack'] for c in possible_play)
+            dialogue = game.get_bot_dialogue(
+                bot_name, 'play_attack_card' if is_attack else 'play_card'
+            )
+            if dialogue:
+                socketio.emit(
+                    'game_log',
+                    {'msg': f"💬 <b>{bot_name}</b>: \"{dialogue}\""},
+                    room='game_room'
+                )
+
             socketio.emit('play_sound', {'type': 'play'}, room='game_room')
 
             if len(game.hands.get(bot_name, [])) == 0:
@@ -388,11 +411,28 @@ def run_bot_logic(expected_bot_name):
                 log_msg = f"💥 {bot_name} had no defence and drew {game.accumulated_penalty} cards!"
                 if getattr(game, 'penalty_source', None):
                     log_msg += f" (caused by {game.penalty_source})"
+
+                dialogue = game.get_bot_dialogue(bot_name, 'draw_penalty_card')
+                if dialogue:
+                    socketio.emit(
+                        'game_log',
+                        {'msg': f"💬 <b>{bot_name}</b>: \"{dialogue}\""},
+                        room='game_room'
+                    )
+
                 socketio.emit('game_log', {'msg': log_msg}, room='game_room')
                 socketio.emit('play_sound', {'type': 'penalty'}, room='game_room')
                 game.draw_card(bot_name, game.accumulated_penalty, reason='penalty_auto')
                 game.clear_penalty()
             else:
+                dialogue = game.get_bot_dialogue(bot_name, 'draw_card')
+                if dialogue:
+                    socketio.emit(
+                        'game_log',
+                        {'msg': f"💬 <b>{bot_name}</b>: \"{dialogue}\""},
+                        room='game_room'
+                    )
+
                 socketio.emit('game_log', {'msg': f"🎴 {bot_name} drew a card."}, room='game_room')
                 socketio.emit('play_sound', {'type': 'draw'}, room='game_room')
                 game.draw_card(bot_name, 1, reason='draw')
@@ -868,6 +908,14 @@ def handle_nudge(data):
     socketio.emit(
         'game_log', {'msg': log_msg}, room='game_room'
     )
+    if game.is_bot(target_name):
+        dialogue = game.get_bot_dialogue(target_name, 'nudge')
+        if dialogue:
+            socketio.emit(
+                'game_log',
+                {'msg': f"💬 <b>{target_name}</b>: \"{dialogue}\""},
+                room='game_room'
+            )
     target_sid = game.name_to_sid.get(target_name)
     if target_sid:
         socketio.emit(

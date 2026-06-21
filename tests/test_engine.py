@@ -1144,3 +1144,25 @@ def test_stats_file_persistence_lifecycle(tmp_path):
     temp_file.unlink()
     assert not temp_file.exists()
 
+
+def test_bot_dialogue_logic():
+    game = FamilyBlackjackEngine()
+    # Test valid bot name and actions
+    dialogue_bender_play = game.get_bot_dialogue("Bender", "play_card")
+    assert dialogue_bender_play == "Compare your hands to mine and weep, fleshbags!"
+    
+    dialogue_bender_attack = game.get_bot_dialogue("Bender", "play_attack_card")
+    assert dialogue_bender_attack == "Eat my shiny metal cards!"
+
+    # Test cleaned emoji prefix in bot names
+    dialogue_emoji_prefix = game.get_bot_dialogue("🤖 Bender", "play_card")
+    assert dialogue_emoji_prefix == "Compare your hands to mine and weep, fleshbags!"
+
+    # Test default fallback for unmapped bot
+    dialogue_unmapped = game.get_bot_dialogue("KITT", "play_card")
+    assert dialogue_unmapped == "Analyzing table state. Card played."
+
+    # Test non-bot player returns None
+    assert game.get_bot_dialogue("Alice", "play_card") is None
+
+
