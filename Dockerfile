@@ -25,6 +25,10 @@ COPY . /app/
 # Run the script to generate a random secret key at build time
 RUN chmod +x generate_secret.sh && ./generate_secret.sh
 
+# Set up the entrypoint script
+RUN chmod +x entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
+
 # Expose the internal port Flask is broadcasting on
 EXPOSE 5000
 

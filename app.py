@@ -31,7 +31,7 @@ if os.path.exists(env_path):
         pass
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'blackjack_family_secret!')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'blackjack_family_secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global instances tracking core system state mechanics
