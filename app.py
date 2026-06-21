@@ -333,7 +333,7 @@ def run_bot_logic(expected_bot_name):
             is_attack = any(c['value'] in ['2', 'Jack'] for c in possible_play)
             is_power = any(c['value'] in ['2', '8', 'Jack', 'Ace'] for c in possible_play)
             is_multiple = len(possible_play) > 1
-            
+
             should_speak = False
             if is_power:
                 should_speak = True

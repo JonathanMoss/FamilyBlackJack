@@ -20,17 +20,24 @@ function escapeHTML(str) {
 let audioCtx = null;
 function initAudio() {
     if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.error("Web Audio API is not supported or blocked:", e);
+        }
     }
 }
 
 // Unlock audio context on the first user interaction to ensure autoplay policies are satisfied
-document.addEventListener('click', () => {
+const unlockEvents = ['click', 'touchstart'];
+const unlockAudio = () => {
     initAudio();
     if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
+        audioCtx.resume().catch(err => console.warn("Failed to resume AudioContext:", err));
     }
-}, { once: true });
+    unlockEvents.forEach(evt => document.removeEventListener(evt, unlockAudio));
+};
+unlockEvents.forEach(evt => document.addEventListener(evt, unlockAudio, { once: true }));
 
 // Custom sorting rules to respect your layout sequence: 2-10, Ace, Queen, King, Jack
 const RANK_HIERARCHY = {
@@ -379,13 +386,24 @@ socket.on('state_update', (state) => {
             timerBar.style.width = '0%';
 
             // Setup the 8-second remaining wobble nudge
-            if (state.current_player === clientName && remaining > 8) {
-                window.turnWarningTimeout = setTimeout(() => {
+            const turnId = `${state.current_player}-${state.turn_start_time}`;
+            if (state.current_player === clientName && window.lastWarningTurnId !== turnId) {
+                if (remaining > 8) {
+                    window.turnWarningTimeout = setTimeout(() => {
+                        window.lastWarningTurnId = turnId;
+                        showToast(`⏰ Hurry up! 8 seconds left!`);
+                        soundEffect('alert');
+                        document.body.classList.add('wobble-effect');
+                        setTimeout(() => document.body.classList.remove('wobble-effect'), 400);
+                    }, (remaining - 8) * 1000);
+                } else {
+                    // Warn immediately if we enter/restore a turn state with less than 8 seconds left
+                    window.lastWarningTurnId = turnId;
                     showToast(`⏰ Hurry up! 8 seconds left!`);
                     soundEffect('alert');
                     document.body.classList.add('wobble-effect');
                     setTimeout(() => document.body.classList.remove('wobble-effect'), 400);
-                }, (remaining - 8) * 1000);
+                }
             }
         }
     }
@@ -946,8 +964,9 @@ function initLobbyVisuals() {
 
     // Delegate clicks for dynamically rendered components (Avatars and Nudges)
     document.addEventListener('click', (e) => {
-        if (e.target.classList.contains('nudge-btn')) {
-            triggerNudge(e.target.dataset.target);
+        const nudgeBtn = e.target.closest('.nudge-btn');
+        if (nudgeBtn) {
+            triggerNudge(nudgeBtn.dataset.target);
         } else if (e.target.classList.contains('interactive-avatar') || e.target.closest('.interactive-avatar')) {
             showAvatarModal();
         } else if (e.target.classList.contains('removable-bot') || e.target.closest('.removable-bot')) {
@@ -985,6 +1004,9 @@ function initLobbyVisuals() {
 
     // Delegate mousemove and mouseout for dynamic 3D card tilt effect
     document.addEventListener('mousemove', (e) => {
+        // Disable 3D tilt tracking on touch-only devices to avoid sticky transitions and touch scrolling interference
+        if (!window.matchMedia('(hover: hover)').matches) return;
+
         const card = e.target.closest('.card:not(.discard-wrapper .card)');
         if (!card) return;
         
