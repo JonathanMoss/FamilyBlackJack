@@ -445,7 +445,10 @@ button:disabled { background: #4a544c !important; color: #888 !important; cursor
 .generic-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; padding: 15px; box-sizing: border-box; }
 .modal-content { background: #143d1f; border: 3px solid #ffeb3b; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.5); max-width: 400px; width: 100%; }
 
-#toast-notification { visibility: hidden; min-width: 250px; background-color: #7c1515; color: #fff; text-align: center; border: 2px solid #ff3b30; border-radius: 8px; padding: 12px; position: fixed; z-index: 2000; left: 50%; top: -50px; transform: translateX(-50%); font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.3s, top 0.3s; width: 80%; max-width: 340px; }
+#toast-notification { visibility: hidden; min-width: 250px; text-align: center; border-radius: 8px; padding: 12px; position: fixed; z-index: 2000; left: 50%; top: -50px; transform: translateX(-50%); font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.3s, top 0.3s; width: 80%; max-width: 340px; }
+#toast-notification.toast-error { background-color: #7c1515; color: #fff; border: 2px solid #ff3b30; }
+#toast-notification.toast-chat { background-color: #143d1f; color: #fff; border: 2px solid #ffeb3b; }
+#toast-notification.toast-nudge { background-color: #fd7e14; color: #fff; border: 2px solid #ffcb05; }
 #toast-notification.show { visibility: visible; opacity: 1; top: 15px; }
 
 .league-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }

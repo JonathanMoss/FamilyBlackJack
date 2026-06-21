@@ -536,16 +536,20 @@ socket.on('prompt_ace_suit', () => {
 });
 
 socket.on('joker_played', (data) => {
-    showToast(data.msg);
+    showToast(data.msg, 'nudge');
     soundEffect('alert');
     document.body.classList.add('joker-flash');
     setTimeout(() => document.body.classList.remove('joker-flash'), 1000);
 });
 
 socket.on('game_log', (data) => {
-    const logBox = document.getElementById('game-log-box');
-    logBox.insertAdjacentHTML('beforeend', `<div>${data.msg}</div>`);
-    logBox.scrollTop = logBox.scrollHeight;
+    if (data.msg && data.msg.startsWith('💬')) {
+        showToast(data.msg, 'chat');
+    } else {
+        const logBox = document.getElementById('game-log-box');
+        logBox.insertAdjacentHTML('beforeend', `<div>${data.msg}</div>`);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
 });
 
 socket.on('game_over', (data) => {
@@ -612,21 +616,32 @@ function executeLogout() {
 }
 
 socket.on('receive_nudge', (data) => {
-    showToast(`⏰ NUDGE from ${data.sender}! Speed up!`);
+    showToast(`⏰ NUDGE from ${data.sender}! Speed up!`, 'nudge');
     soundEffect('alert');
     document.body.classList.add('wobble-effect');
     setTimeout(() => document.body.classList.remove('wobble-effect'), 400);
 });
 
 socket.on('error', (data) => {
-    showToast(data.msg);
+    showToast(data.msg, 'error');
 });
 
-function showToast(message) {
+function showToast(message, type = 'error') {
     const toast = document.getElementById('toast-notification');
-    toast.innerText = message;
+    toast.className = ''; // Reset classes
+    if (type === 'chat') {
+        toast.classList.add('toast-chat');
+    } else if (type === 'nudge') {
+        toast.classList.add('toast-nudge');
+    } else {
+        toast.classList.add('toast-error');
+    }
+    toast.innerHTML = message;
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 3500);
+    if (toast.timeoutId) {
+        clearTimeout(toast.timeoutId);
+    }
+    toast.timeoutId = setTimeout(() => toast.classList.remove('show'), 3500);
 }
 
 async function soundEffect(type) {
