@@ -82,25 +82,38 @@ function organizeHand(mode) {
 }
 
 function renderRearrangedHand() {
-    const handDiv = document.getElementById('my-hand');
-    handDiv.innerHTML = '';
-    selectedCards = []; 
-    
-    currentHand.forEach((card) => {
-        const cDiv = buildCardElement(card);
-        cDiv.onclick = () => {
-            cDiv.classList.toggle('selected');
-            if(cDiv.classList.contains('selected')) {
-                selectedCards.push(card);
-            } else {
-                selectedCards = selectedCards.filter(c => !(c.value === card.value && c.suit === card.suit));
-            }
-            updateBadges(handDiv);
-            evaluateButtonAbilities();
-        };
-        handDiv.appendChild(cDiv);
-    });
-    evaluateButtonAbilities();
+    const updateDOM = () => {
+        const handDiv = document.getElementById('my-hand');
+        handDiv.innerHTML = '';
+        selectedCards = []; 
+        
+        currentHand.forEach((card) => {
+            const cDiv = buildCardElement(card);
+            
+            // Assign a unique view-transition-name to each card based on value and suit
+            const safeName = `card-${card.value}-${card.suit}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+            cDiv.style.viewTransitionName = safeName;
+            
+            cDiv.onclick = () => {
+                cDiv.classList.toggle('selected');
+                if(cDiv.classList.contains('selected')) {
+                    selectedCards.push(card);
+                } else {
+                    selectedCards = selectedCards.filter(c => !(c.value === card.value && c.suit === card.suit));
+                }
+                updateBadges(handDiv);
+                evaluateButtonAbilities();
+            };
+            handDiv.appendChild(cDiv);
+        });
+        evaluateButtonAbilities();
+    };
+
+    if (document.startViewTransition) {
+        document.startViewTransition(updateDOM);
+    } else {
+        updateDOM();
+    }
 }
 
 function buildCardElement(card) {
@@ -386,6 +399,17 @@ socket.on('state_update', (state) => {
         battleBanner.style.display = 'flex';
         ammoValue.innerText = `+${state.penalty}`;
         
+        // Remove existing penalty tier classes
+        battleBanner.classList.remove('penalty-low', 'penalty-mid', 'penalty-high');
+        // Classify tier based on current stacking penalty amount
+        if (state.penalty <= 2) {
+            battleBanner.classList.add('penalty-low');
+        } else if (state.penalty <= 5) {
+            battleBanner.classList.add('penalty-mid');
+        } else {
+            battleBanner.classList.add('penalty-high');
+        }
+        
         const cardSymbol = (state.penalty_type === 'BJ') ? 'Jacks 🃏' : 'Twos ✌️';
         battleTypeText.innerText = `Stacking payload contains active ${cardSymbol}!`;
         
@@ -395,6 +419,7 @@ socket.on('state_update', (state) => {
         }
     } else {
         battleBanner.style.display = 'none';
+        battleBanner.classList.remove('penalty-low', 'penalty-mid', 'penalty-high');
         document.getElementById('personal-penalty-alert').style.display = 'none';
     }
     // --- END PREMIUM MATCH MONITOR BLOCK ---
@@ -402,11 +427,20 @@ socket.on('state_update', (state) => {
     // Refresh Top Discard Card View layout
     if(state.top_card) {
         const frame = document.getElementById('top-card');
-        frame.className = 'card image-card';
-        if(state.top_card.suit === 'Hearts' || state.top_card.suit === 'Diamonds') frame.classList.add('red');
-        
-        const imgPath = `/static/images/${state.top_card.value}_of_${state.top_card.suit}.png`.toLowerCase();
-        frame.innerHTML = `<img src="${imgPath}" class="card-img" alt="${state.top_card.value} of ${state.top_card.suit}">`;
+        const updateTopCard = () => {
+            frame.className = 'card image-card';
+            if(state.top_card.suit === 'Hearts' || state.top_card.suit === 'Diamonds') frame.classList.add('red');
+            
+            const imgPath = `/static/images/${state.top_card.value}_of_${state.top_card.suit}.png`.toLowerCase();
+            frame.innerHTML = `<img src="${imgPath}" class="card-img" alt="${state.top_card.value} of ${state.top_card.suit}">`;
+        };
+
+        if (document.startViewTransition) {
+            frame.style.viewTransitionName = 'top-discard-card';
+            document.startViewTransition(updateTopCard);
+        } else {
+            updateTopCard();
+        }
 
         const suitIndicator = document.getElementById('active-suit-indicator');
         if (state.is_started) {
@@ -418,84 +452,98 @@ socket.on('state_update', (state) => {
         }
     }
 
+    // Clear spectator data if we are actively playing
+    const myHandSize = state.hand_sizes[clientName] || 0;
+    if (state.is_started && myHandSize > 0) {
+        spectatorHandsData = null;
+    }
+
     // Refresh Room Active Table Roster
     const listContainer = document.getElementById('player-list-box');
-    listContainer.innerHTML = '';
-    state.player_list.forEach(p => {
-        const row = document.createElement('div');
-        row.className = 'player-row';
-        if(state.is_started && state.current_player === p) row.classList.add('active-turn');
+    const updateRoster = () => {
+        listContainer.innerHTML = '';
+        state.player_list.forEach(p => {
+            const row = document.createElement('div');
+            row.className = 'player-row';
+            if(state.is_started && state.current_player === p) row.classList.add('active-turn');
 
-        const escapedP = escapeHTML(p);
-        const cardCount = state.hand_sizes[p] || 0;
-        let pLabel = (p === clientName) ? `<b>${escapedP} (You)</b>` : escapedP;
+            // Unique transition name for each player row to animate changes
+            const safePlayerName = `player-row-${p}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+            row.style.viewTransitionName = safePlayerName;
 
-        const isSpectating = state.is_started && cardCount === 0;
-        const statusText = isSpectating ? '👁️ Spectating' : `🃏 (${cardCount} left)`;
+            const escapedP = escapeHTML(p);
+            const cardCount = state.hand_sizes[p] || 0;
+            let pLabel = (p === clientName) ? `<b>${escapedP} (You)</b>` : escapedP;
 
-        const isLast = state.is_started && cardCount === 1;
-        const lastIcon = isLast ? `<span class="last-card-icon" title="Last Card">🔥</span>` : '';
-        const hostIcon = (p === state.host_name) ? `<span title="Host" style="margin-right: 5px;">👑</span>` : '';
+            const isSpectating = state.is_started && cardCount === 0;
+            const statusText = isSpectating ? '👁️ Spectating' : `🃏 (${cardCount} left)`;
 
-        const rightControls = (p !== clientName && state.is_started) ? `<button class="nudge-btn" data-target="${escapedP}">⏰</button>` : '';
+            const isLast = state.is_started && cardCount === 1;
+            const lastIcon = isLast ? `<span class="last-card-icon" title="Last Card">🔥</span>` : '';
+            const hostIcon = (p === state.host_name) ? `<span title="Host" style="margin-right: 5px;">👑</span>` : '';
 
-        // If there's an active penalty, highlight the current_player as the penalty target
-        const isPenalized = state.penalty > 0 && state.current_player === p;
-        const penaltyIcon = isPenalized ? `<span class="penalty-indicator" title="Penalty: +${state.penalty}">⚠️ +${state.penalty}</span>` : '';
+            const rightControls = (p !== clientName && state.is_started) ? `<button class="nudge-btn" data-target="${escapedP}">⏰</button>` : '';
 
-        if (isPenalized) row.classList.add('penalty-target');
+            // If there's an active penalty, highlight the current_player as the penalty target
+            const isPenalized = state.penalty > 0 && state.current_player === p;
+            const penaltyIcon = isPenalized ? `<span class="penalty-indicator" title="Penalty: +${state.penalty}">⚠️ +${state.penalty}</span>` : '';
 
-        const avatar = (state.avatars && state.avatars[p]) ? state.avatars[p] : ((state.bots && state.bots.includes(p)) ? '🤖' : '👤');
-        const isMe = p === clientName;
-        const isBot = state.bots && state.bots.includes(p);
-        let avatarCursor = 'class="player-avatar"';
-        if (isMe) {
-            avatarCursor = 'style="cursor:pointer;" title="Click to change avatar" class="player-avatar interactive-avatar"';
-        } else if (isBot && !state.is_started && !isDemoMode) {
-            avatarCursor = 'style="cursor:pointer;" title="Click to remove bot" class="player-avatar removable-bot"';
-        }
-        const avatarHtml = `<span ${avatarCursor}>${avatar}</span>`;
+            if (isPenalized) row.classList.add('penalty-target');
 
-        row.dataset.name = p;
-        row.innerHTML = `
-            <div class="player-meta">
-                <span>${avatarHtml} ${pLabel} ${hostIcon} ${state.is_started ? statusText : '⏳ Ready'} ${lastIcon} ${penaltyIcon}</span>
-                ${rightControls}
-            </div>
-            <div class="spectator-hand-tray" style="display:none;"></div>
-        `;
-        listContainer.appendChild(row);
-
-        // Trigger a brief personal visual when *you* are the penalized player, but only when it changes
-        if (isPenalized && p === clientName) {
-            if (lastPenalized.name !== clientName || lastPenalized.amount !== state.penalty) {
-                showToast(`⚠️ You have a penalty of +${state.penalty}!`);
-                soundEffect('alert');
-                document.body.classList.add('penalty-flash');
-                setTimeout(() => document.body.classList.remove('penalty-flash'), 1000);
-                lastPenalized.name = clientName;
-                lastPenalized.amount = state.penalty;
+            const avatar = (state.avatars && state.avatars[p]) ? state.avatars[p] : ((state.bots && state.bots.includes(p)) ? '🤖' : '👤');
+            const isMe = p === clientName;
+            const isBot = state.bots && state.bots.includes(p);
+            let avatarCursor = 'class="player-avatar"';
+            if (isMe) {
+                avatarCursor = 'style="cursor:pointer;" title="Click to change avatar" class="player-avatar interactive-avatar"';
+            } else if (isBot && !state.is_started && !isDemoMode) {
+                avatarCursor = 'style="cursor:pointer;" title="Click to remove bot" class="player-avatar removable-bot"';
             }
-        }
-        if (!isPenalized && lastPenalized.name === p) {
-            // penalty cleared
-            lastPenalized.name = null;
-            lastPenalized.amount = 0;
-        }
-    });
+            const avatarHtml = `<span ${avatarCursor}>${avatar}</span>`;
+
+            row.dataset.name = p;
+            row.innerHTML = `
+                <div class="player-meta">
+                    <span>${avatarHtml} ${pLabel} ${hostIcon} ${state.is_started ? statusText : '⏳ Ready'} ${lastIcon} ${penaltyIcon}</span>
+                    ${rightControls}
+                </div>
+                <div class="spectator-hand-tray" style="display:none;"></div>
+            `;
+            listContainer.appendChild(row);
+
+            // Trigger a brief personal visual when *you* are the penalized player, but only when it changes
+            if (isPenalized && p === clientName) {
+                if (lastPenalized.name !== clientName || lastPenalized.amount !== state.penalty) {
+                    showToast(`⚠️ You have a penalty of +${state.penalty}!`);
+                    soundEffect('alert');
+                    document.body.classList.add('penalty-flash');
+                    setTimeout(() => document.body.classList.remove('penalty-flash'), 1000);
+                    lastPenalized.name = clientName;
+                    lastPenalized.amount = state.penalty;
+                }
+            }
+            if (!isPenalized && lastPenalized.name === p) {
+                // penalty cleared
+                lastPenalized.name = null;
+                lastPenalized.amount = 0;
+            }
+        });
+        
+        // Render spectator hands inside the roster DOM updates so that the asynchronous View Transition does not wipe them out
+        renderSpectatorHands();
+    };
+
+    if (document.startViewTransition) {
+        document.startViewTransition(updateRoster);
+    } else {
+        updateRoster();
+    }
 
     // Refresh Global Career Scoreboard Metrics
     const tbody = document.getElementById('league-rows');
     if (tbody && state.league_html) {
         tbody.innerHTML = state.league_html;
     }
-
-    // Clear spectator data if we are actively playing
-    const myHandSize = state.hand_sizes[clientName] || 0;
-    if (state.is_started && myHandSize > 0) {
-        spectatorHandsData = null;
-    }
-    renderSpectatorHands();
 
     evaluateButtonAbilities();
 });
@@ -658,6 +706,17 @@ async function soundEffect(type) {
 
     const now = audioCtx.currentTime;
 
+    // Device haptics pattern vibration helper
+    const triggerHaptic = (pattern) => {
+        if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+            try {
+                window.navigator.vibrate(pattern);
+            } catch (e) {
+                // Ignore silent failure if browser restricts vibrate API
+            }
+        }
+    };
+
     // Standard helper to play a clean tone with exponential decay
     const playTone = (freq, type = 'sine', duration = 0.1, volume = 0.1, startTime = now) => {
         const osc = audioCtx.createOscillator();
@@ -676,6 +735,7 @@ async function soundEffect(type) {
 
     switch (type) {
         case 'play': {
+            triggerHaptic(15);
             // Rapid downward frequency chirp: organic card-tap thump on a soft table
             const duration = 0.12;
             const osc = audioCtx.createOscillator();
@@ -695,6 +755,7 @@ async function soundEffect(type) {
             break;
         }
         case 'draw': {
+            triggerHaptic(10);
             // Soft paper-like slide using overlapping sine waves (a perfect fifth harmony) with upward glide
             const duration = 0.14;
             [440.00, 659.25].forEach((freq, idx) => {
@@ -716,6 +777,7 @@ async function soundEffect(type) {
             break;
         }
         case 'shuffle': {
+            triggerHaptic([10, 30, 10, 30, 10]);
             // Gentle rhythmic riffle sound using triangle wave clicks with accelerating/decelerating schedule
             for (let i = 0; i < 9; i++) {
                 const clickTime = now + (i * 0.04) + (Math.random() * 0.008);
@@ -726,6 +788,7 @@ async function soundEffect(type) {
             break;
         }
         case 'alert': {
+            triggerHaptic([60, 80, 60]);
             // High-end double bell-chime (a clean major third E6 and G#6) with exponential ring-out
             const duration = 0.5;
             [1318.51, 1661.22].forEach((freq, idx) => {
@@ -760,6 +823,7 @@ async function soundEffect(type) {
             break;
         }
         case 'winner': {
+            triggerHaptic([100, 50, 100, 50, 250]);
             // Triumphant, warm chord resolution (C-Major triad + Maj7/9 extensions) played with staggered arpeggiated entry
             // Notes: C4 (261.63), G4 (392.00), C5 (523.25), E5 (659.25), B5 (987.77)
             const chords = [
@@ -918,6 +982,34 @@ function initLobbyVisuals() {
         }
     }
     preloadCardImages();
+
+    // Delegate mousemove and mouseout for dynamic 3D card tilt effect
+    document.addEventListener('mousemove', (e) => {
+        const card = e.target.closest('.card:not(.discard-wrapper .card)');
+        if (!card) return;
+        
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        
+        const tiltX = ((centerY - y) / centerY) * 12;
+        const tiltY = ((x - centerX) / centerX) * 12;
+        
+        const isSelected = card.classList.contains('selected');
+        card.style.transform = `translateY(${isSelected ? '-16px' : '-8px'}) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale(${isSelected ? '1.05' : '1.04'})`;
+        card.style.boxShadow = `${-tiltY * 0.8}px ${tiltX * 0.8 + 12}px 24px rgba(0, 0, 0, 0.45)`;
+    });
+
+    document.addEventListener('mouseout', (e) => {
+        const card = e.target.closest('.card:not(.discard-wrapper .card)');
+        if (!card || (e.relatedTarget && e.relatedTarget.closest('.card') === card)) return;
+        
+        card.style.transform = '';
+        card.style.boxShadow = '';
+    });
 }
 initLobbyVisuals();
 
