@@ -1166,3 +1166,16 @@ def test_bot_dialogue_logic():
     assert game.get_bot_dialogue("Alice", "play_card") is None
 
 
+def test_is_demo_mode_lifecycle():
+    game = FamilyBlackjackEngine()
+    assert game.is_demo_mode is False
+    game.is_demo_mode = True
+    game.reset_lobby()
+    assert game.is_demo_mode is False
+
+    game.is_demo_mode = True
+    game.reset_match()
+    assert game.is_demo_mode is False
+
+
+

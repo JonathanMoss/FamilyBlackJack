@@ -180,6 +180,7 @@ class FamilyBlackjackEngine:
         self.socketio = None
         self.cached_league_html = None
         self.timer_session_id = 0
+        self.is_demo_mode = False
         is_testing = 'pytest' in sys.modules or 'unittest' in sys.modules
         self.stats_file_path = stats_file_path if stats_file_path is not None else (
             None if is_testing else STATS_FILE_PATH
@@ -249,6 +250,7 @@ class FamilyBlackjackEngine:
         self.joker_cooldown = 0
         self.host_name = None
         self.cached_league_html = None
+        self.is_demo_mode = False
         # Note: We intentionally DO NOT clear league_wins or league_losses
         # so career family stats persist across separate game room lobbies!
 
@@ -279,6 +281,7 @@ class FamilyBlackjackEngine:
         self.joker_cooldown = 0
         self.host_name = None
         self.cached_league_html = None
+        self.is_demo_mode = False
 
     def build_deck(self):
         """Construct a fresh 52-card deck array and shuffle it.

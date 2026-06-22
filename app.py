@@ -195,7 +195,7 @@ def _handle_game_over(winner_name):
     game.declared_ace_suit = None
 
     awards = game.calculate_awards()
-    is_demo = all(game.is_bot(p) for p in game.players)
+    is_demo = getattr(game, 'is_demo_mode', False)
     all_players = set(game.players + list(game.league_wins.keys()))
     player_colors = get_player_colors(all_players)
     try:
@@ -632,6 +632,7 @@ def handle_start_demo():
     )
 
     if game.start_game():
+        game.is_demo_mode = True
         for human in connected_humans:
             game.add_player(human)
         _broadcast_match_start()
@@ -653,6 +654,7 @@ def handle_stop_demo():
 
     # Stop the game loop flag
     game.is_started = False
+    game.is_demo_mode = False
 
     # Remove all bots
     bots = [p for p in game.players if game.is_bot(p)]
@@ -681,6 +683,7 @@ def handle_start():
     sid = request.sid
     requester = game.sid_to_name.get(sid)
     game.host_name = requester
+    game.is_demo_mode = False
     if game.start_game():
         _broadcast_match_start()
     else:
