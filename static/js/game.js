@@ -22,6 +22,37 @@ function escapeHTML(str) {
         .replace(/'/g, '&#39;');
 }
 
+function safeStartViewTransition(updateCallback) {
+    if (document.startViewTransition) {
+        try {
+            const transition = document.startViewTransition(updateCallback);
+            if (transition) {
+                transition.ready.catch(() => {});
+                transition.finished.catch(() => {});
+            }
+            return transition;
+        } catch (e) {
+            updateCallback();
+            return null;
+        }
+    } else {
+        updateCallback();
+        return null;
+    }
+}
+
+function areHandsEqual(handA, handB) {
+    if (!handA || !handB || handA.length !== handB.length) return false;
+    const serializeCard = c => `${c.value}-${c.suit}`;
+    const serializedA = handA.map(serializeCard).sort();
+    const serializedB = handB.map(serializeCard).sort();
+    for (let i = 0; i < serializedA.length; i++) {
+        if (serializedA[i] !== serializedB[i]) return false;
+    }
+    return true;
+}
+
+
 // Web Audio API context for synthesized game sounds
 let audioCtx = null;
 function initAudio() {
@@ -124,8 +155,8 @@ function renderRearrangedHand() {
 
     const isGameOverModalOpen = document.getElementById('game-over-modal') && 
                                 document.getElementById('game-over-modal').style.display === 'flex';
-    if (document.startViewTransition && !isGameOverModalOpen) {
-        document.startViewTransition(updateDOM);
+    if (!isGameOverModalOpen) {
+        safeStartViewTransition(updateDOM);
     } else {
         updateDOM();
     }
@@ -237,10 +268,9 @@ function evaluateButtonAbilities() {
 }
 
 socket.on('your_hand', (data) => {
-    // Only drop and wipe internal layout array if an operational card count difference occurs
-    const incomingCountChange = data.hand.length !== currentHand.length;
-    currentHand = data.hand;
-    if (incomingCountChange || currentHand.length === 0) {
+    // Only drop and wipe internal layout array if an operational card change occurs
+    if (!areHandsEqual(data.hand, currentHand)) {
+        currentHand = data.hand;
         renderRearrangedHand();
     }
 });
@@ -471,12 +501,14 @@ socket.on('state_update', (state) => {
             const isGameOverModalOpen = document.getElementById('game-over-modal') && 
                                         document.getElementById('game-over-modal').style.display === 'flex';
 
-            if (document.startViewTransition && !isGameOverModalOpen) {
+            if (!isGameOverModalOpen) {
                 frame.style.viewTransitionName = 'top-discard-card';
-                const transition = document.startViewTransition(updateTopCard);
-                transition.finished.finally(() => {
-                    frame.style.viewTransitionName = '';
-                });
+                const transition = safeStartViewTransition(updateTopCard);
+                if (transition) {
+                    transition.finished.finally(() => {
+                        frame.style.viewTransitionName = '';
+                    }).catch(() => {});
+                }
             } else {
                 updateTopCard();
             }
@@ -582,8 +614,8 @@ socket.on('state_update', (state) => {
     const isGameOverModalOpen = document.getElementById('game-over-modal') && 
                                 document.getElementById('game-over-modal').style.display === 'flex';
 
-    if (document.startViewTransition && !isGameOverModalOpen) {
-        document.startViewTransition(updateRoster);
+    if (!isGameOverModalOpen) {
+        safeStartViewTransition(updateRoster);
     } else {
         updateRoster();
     }
