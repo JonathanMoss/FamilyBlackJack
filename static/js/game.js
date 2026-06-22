@@ -122,7 +122,9 @@ function renderRearrangedHand() {
         evaluateButtonAbilities();
     };
 
-    if (document.startViewTransition) {
+    const isGameOverModalOpen = document.getElementById('game-over-modal') && 
+                                document.getElementById('game-over-modal').style.display === 'flex';
+    if (document.startViewTransition && !isGameOverModalOpen) {
         document.startViewTransition(updateDOM);
     } else {
         updateDOM();
@@ -466,7 +468,10 @@ socket.on('state_update', (state) => {
         const triggerTransition = () => {
             if (frame.dataset.latestImgPath !== imgPath) return;
 
-            if (document.startViewTransition) {
+            const isGameOverModalOpen = document.getElementById('game-over-modal') && 
+                                        document.getElementById('game-over-modal').style.display === 'flex';
+
+            if (document.startViewTransition && !isGameOverModalOpen) {
                 frame.style.viewTransitionName = 'top-discard-card';
                 const transition = document.startViewTransition(updateTopCard);
                 transition.finished.finally(() => {
@@ -574,7 +579,10 @@ socket.on('state_update', (state) => {
         renderSpectatorHands();
     };
 
-    if (document.startViewTransition) {
+    const isGameOverModalOpen = document.getElementById('game-over-modal') && 
+                                document.getElementById('game-over-modal').style.display === 'flex';
+
+    if (document.startViewTransition && !isGameOverModalOpen) {
         document.startViewTransition(updateRoster);
     } else {
         updateRoster();
@@ -1201,6 +1209,7 @@ function triggerConfetti() {
         particle.style.borderRadius = '2px';
         particle.style.opacity = Math.random() * 0.5 + 0.5;
         particle.style.transform = `rotate(${Math.random() * 360}deg)`;
+        particle.style.pointerEvents = 'none';
 
         container.appendChild(particle);
 
@@ -1214,5 +1223,5 @@ function triggerConfetti() {
         });
 
         animation.onfinish = () => particle.remove();
-    }, 25);
+    }, 50);
 }
